@@ -6,7 +6,7 @@ const User = require("../models/userModel");
 router.post("/register", async (req, res) => {
   try {
     const { phone, username, image, password, confirmPassword } = req.body;
-
+    console.log("req", req.body)
     if (!phone || !username || !password || !confirmPassword) {
       return res
         .status(400)
