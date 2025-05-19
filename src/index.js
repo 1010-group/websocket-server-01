@@ -22,13 +22,14 @@ app.use(express.json());
 // API yo‘llar
 app.use("/api/users", userRouter);
 
-// Socket.io ulanish
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
+    origin: "http://localhost:5173", // YOKI https://yourfrontenddomain.com
+    methods: ["GET", "POST"],
+    credentials: true
+  }
 });
+
 
 const onlineUsers = []
 
