@@ -30,13 +30,22 @@ const io = new Server(server, {
   },
 });
 
+const onlineUsers = []
+
 io.on('connection', (socket) => {
   console.log('Новый пользователь', socket.id);
 
-  socket.on('send_message', (data) => {
-    console.log(data);
-    io.emit('message', data);
-  });
+  socket.on("user_joined", (user) => {
+    console.log("User joined", user);
+
+    const checkUser = onlineUsers.find((u) => u.phone === user.phone);
+    if (!checkUser) {
+      onlineUsers.push(user);
+    }
+
+    io.emit("user_joined", user);
+    io.emit("online_users", onlineUsers);
+  })
 });
 
 app.use('/api/users', userRouter);
