@@ -11,56 +11,57 @@ connectDB();
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use("/api/users", userRouter);
 
 const server = http.createServer(app);
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// API yo‘llar
-app.use("/api/users", userRouter);
-
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:5174"], // YOKI https://yourfrontenddomain.com
+    origin: ["http://localhost:5173", "http://localhost:5174"],
     methods: ["GET", "POST"],
     credentials: true,
   },
 });
 
+// ❗ Global onlineUsers
 let onlineUsers = [];
 
-io.on("connection", async (socket) => {
-  console.log("Новый пользователь", socket.id);
-  const users = await userModel.find({});
-  onlineUsers = users
-  
+(async () => {
+  // Server boshlanganda barcha userlarni olish
+  const allUsers = await userModel.find({});
+  onlineUsers = allUsers.map(user => ({
+    _id: user._id.toString(),
+    username: user.username,
+    phone: user.phone,
+    profilePic: user.profilePic,
+    status: false,
+  }));
+})();
+
+io.on("connection", (socket) => {
+  console.log("🔌 Yangi ulanish:", socket.id);
+
   socket.on("user_joined", (user) => {
-    console.log("User joined", user);
+    console.log("✅ User joined:", user.phone);
 
-    const checkUser = onlineUsers.find((u) => u.phone === user.phone);
-    if (!checkUser) {
-      onlineUsers.push(user);
-    }
+    onlineUsers = onlineUsers.map((u) =>
+      u._id === user._id ? { ...u, status: true, socketId: socket.id } : u
+    );
 
-    io.emit("user_joined", user);
     io.emit("online_users", onlineUsers);
 
     socket.on("disconnect", () => {
-      console.log("User left: ", user.phone);
-      const index = onlineUsers.findIndex((u) => u.phone === user.phone);
-      if (index !== -1) {
-        onlineUsers.splice(index, 1);
-      }
+      console.log("❌ User disconnected:", user.phone);
+
+      onlineUsers = onlineUsers.map((u) =>
+        u._id === user._id ? { ...u, status: false } : u
+      );
+
       io.emit("online_users", onlineUsers);
     });
   });
 });
 
-app.use("/api/users", userRouter);
-
-// Serverni ishga tushirish
 server.listen(5000, () => {
-  console.log("🚀 Сервер запущен на http://localhost:5000");
+  console.log("🚀 Server ishga tushdi: http://localhost:5000");
 });
