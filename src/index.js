@@ -25,7 +25,7 @@ const io = new Server(server, {
 
 // ❗ Global onlineUsers
 let onlineUsers = [];
-
+// IIFE - Immediately Invoked Function Expression
 (async () => {
   // Server boshlanganda barcha userlarni olish
   const allUsers = await userModel.find({});
