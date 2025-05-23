@@ -60,6 +60,11 @@ io.on("connection", (socket) => {
       io.emit("online_users", onlineUsers);
     });
   });
+
+  socket.on("send_message", (data) => {
+    console.log("ALI: ", data)
+    io.emit("receive_message", data);
+  });
 });
 
 server.listen(5000, () => {
