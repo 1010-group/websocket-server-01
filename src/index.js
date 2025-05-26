@@ -29,12 +29,13 @@ let onlineUsers = [];
 (async () => {
   // Server boshlanganda barcha userlarni olish
   const allUsers = await userModel.find({});
-  onlineUsers = allUsers.map(user => ({
+  onlineUsers = allUsers.map((user) => ({
     _id: user._id.toString(),
     username: user.username,
     phone: user.phone,
     profilePic: user.profilePic,
     status: false,
+    typing: false,
   }));
 })();
 
@@ -62,8 +63,23 @@ io.on("connection", (socket) => {
   });
 
   socket.on("send_message", (data) => {
-    console.log("ALI: ", data)
+    console.log("ALI: ", data);
     io.emit("receive_message", data);
+  });
+
+  socket.on("typing", (data) => {
+    console.log("typing: ", data);
+
+    const receiver = onlineUsers.find((u) => u._id === data.to._id);
+
+    if (receiver?.socketId) {
+      socket.to(receiver.socketId).emit("typed", {
+        from: data.from,
+        typing: true,
+      });
+    } else {
+      console.log("Receiver not found or not online");
+    }
   });
 });
 
