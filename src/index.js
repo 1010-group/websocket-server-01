@@ -64,7 +64,7 @@ io.on("connection", (socket) => {
 
   socket.on("send_message", (data) => {
     console.log("ALI: ", data);
-    io.emit("receive_message", data);
+    socket.to(data.to.socketId).emit("receive_message", data);
   });
 
   socket.on("typing", (data) => {
