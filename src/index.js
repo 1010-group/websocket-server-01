@@ -2,16 +2,20 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const userModel = require("./models/userModel");
 const connectDB = require("./config/database");
-const userRouter = require("./routers/userRouter");
+const userModel = require("./models/userModel");
+const Message = require("./models/messageModel");
 
 connectDB();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const userRouter = require("./routers/userRouter");
+const messageRouter = require("./routers/messageRouter");
 app.use("/api/users", userRouter);
+app.use("/api/messages", messageRouter);
 
 const server = http.createServer(app);
 
@@ -23,11 +27,10 @@ const io = new Server(server, {
   },
 });
 
-// ❗ Global onlineUsers
+// ⬇ Глобальный список онлайн-пользователей
 let onlineUsers = [];
-// IIFE - Immediately Invoked Function Expression
+
 (async () => {
-  // Server boshlanganda barcha userlarni olish
   const allUsers = await userModel.find({});
   onlineUsers = allUsers.map((user) => ({
     _id: user._id.toString(),
@@ -40,49 +43,75 @@ let onlineUsers = [];
 })();
 
 io.on("connection", (socket) => {
-  console.log("🔌 Yangi ulanish:", socket.id);
+  console.log("🔌 Подключился:", socket.id);
 
+  // ⬇ Получение истории сообщений между двумя пользователями
+  socket.on("get_history", async ({ from, to }) => {
+    try {
+      const messages = await Message.find({
+        $or: [
+          { from: from, to: to },
+          { from: to, to: from },
+        ],
+      }).sort({ timestamp: 1 });
+
+      socket.emit("chat_history", messages);
+    } catch (err) {
+      console.error("❌ Ошибка истории:", err);
+    }
+  });
+
+  // ⬇ Пользователь присоединился
   socket.on("user_joined", (user) => {
-    console.log("✅ User joined:", user.phone);
-
     onlineUsers = onlineUsers.map((u) =>
       u._id === user._id ? { ...u, status: true, socketId: socket.id } : u
     );
-
     io.emit("online_users", onlineUsers);
-
-    socket.on("disconnect", () => {
-      console.log("❌ User disconnected:", user.phone);
-
-      onlineUsers = onlineUsers.map((u) =>
-        u._id === user._id ? { ...u, status: false } : u
-      );
-
-      io.emit("online_users", onlineUsers);
-    });
   });
 
-  socket.on("send_message", (data) => {
-    console.log("ALI: ", data);
-    socket.to(data.to.socketId).emit("receive_message", data);
+  // ⬇ Получение сообщения
+  socket.on("send_message", async (data) => {
+    const receiver = onlineUsers.find((u) => u._id === data.to);
+
+    try {
+      const savedMessage = await Message.create({
+        from: data.from,
+        to: data.to,
+        text: data.text,
+        timestamp: data.timestamp || new Date(),
+      });
+
+      if (receiver?.socketId) {
+        io.to(receiver.socketId).emit("receive_message", {
+          ...data,
+          _id: savedMessage._id,
+        });
+      }
+    } catch (err) {
+      console.error("❌ Ошибка при сохранении:", err);
+    }
   });
 
+  // ⬇ Когда кто-то печатает
   socket.on("typing", (data) => {
-    console.log("typing: ", data);
-
-    const receiver = onlineUsers.find((u) => u._id === data.to._id);
-
+    const receiver = onlineUsers.find((u) => u._id === data.to);
     if (receiver?.socketId) {
-      socket.to(receiver.socketId).emit("typed", {
+      io.to(receiver.socketId).emit("typed", {
         from: data.from,
         typing: true,
       });
-    } else {
-      console.log("Receiver not found or not online");
     }
+  });
+
+  // ⬇ При отключении
+  socket.on("disconnect", () => {
+    onlineUsers = onlineUsers.map((u) =>
+      u.socketId === socket.id ? { ...u, status: false, socketId: null } : u
+    );
+    io.emit("online_users", onlineUsers);
   });
 });
 
 server.listen(5000, () => {
-  console.log("🚀 Server ishga tushdi: http://localhost:5000");
+  console.log("🚀 Сервер запущен: http://localhost:5000");
 });
