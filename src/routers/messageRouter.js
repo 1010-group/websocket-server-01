@@ -20,4 +20,22 @@ router.get("/:user1/:user2", async (req, res) => {
   }
 });
 
+router.delete("/:messageId", async (req, res) => {
+  const { messageId } = req.params;
+
+  try {
+    const deleted = await Message.findByIdAndDelete(messageId);
+    if (!deleted) {
+      return res.status(404).json({ message: "Сообщение не найдено" });
+    }
+    res.json({ message: "Сообщение удалено", deleted });
+  } catch (err) {
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
+
+
+
+
 module.exports = router;

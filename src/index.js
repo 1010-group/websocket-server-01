@@ -61,6 +61,19 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("delete_message", async ({ messageId }) => {
+    try {
+      const deleted = await Message.findByIdAndDelete(messageId);
+      if (deleted) {
+        // Уведомляем всех клиентов об удалении сообщения
+        io.emit("message_deleted", messageId);
+      }
+    } catch (err) {
+      console.error("Ошибка при удалении сообщения:", err);
+    }
+  });
+
+
   // ⬇ Пользователь присоединился
   socket.on("user_joined", (user) => {
     onlineUsers = onlineUsers.map((u) =>
