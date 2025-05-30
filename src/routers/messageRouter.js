@@ -1,9 +1,11 @@
 const express = require("express");
-const router = express.Router();
 const Message = require("../models/messageModel");
+const router = express.Router();
 
+// Получить историю между двумя пользователями
 router.get("/:user1/:user2", async (req, res) => {
   const { user1, user2 } = req.params;
+
   try {
     const messages = await Message.find({
       $or: [
@@ -13,8 +15,8 @@ router.get("/:user1/:user2", async (req, res) => {
     }).sort({ timestamp: 1 });
 
     res.json(messages);
-  } catch (error) {
-    res.status(500).json({ message: "Xatolik yuz berdi" });
+  } catch (err) {
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 });
 
