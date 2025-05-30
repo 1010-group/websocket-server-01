@@ -5,6 +5,7 @@ const cors = require("cors");
 const userModel = require("./models/userModel");
 const connectDB = require("./config/database");
 const userRouter = require("./routers/userRouter");
+const messageRoutes = require("./routers/messageRouter");
 
 connectDB();
 
@@ -12,6 +13,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use("/api/users", userRouter);
+app.use("/api/messages", messageRoutes);
 
 const server = http.createServer(app);
 
@@ -60,11 +62,33 @@ io.on("connection", (socket) => {
 
       io.emit("online_users", onlineUsers);
     });
+
+    socket.on("user_left", (user) => {
+      onlineUsers = onlineUsers.map((u) =>
+        u._id === user._id ? { ...u, status: false } : u
+      );
+      io.emit("online_users", onlineUsers);
+    });
   });
 
-  socket.on("send_message", (data) => {
-    console.log("ALI: ", data);
-    socket.to(data.to.socketId).emit("receive_message", data);
+  socket.on("send_message", async (data) => {
+    const receiver = onlineUsers.find((u) => u._id === data.to._id);
+
+    if (receiver?.socketId) {
+      io.to(receiver.socketId).emit("receive_message", data);
+    }
+
+    // Backendda saqlash (MongoDB)
+    try {
+      await messageModel.create({
+        from: data.from._id,
+        to: data.to._id,
+        text: data.text,
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      console.error("❌ Message saqlanmadi:", error.message);
+    }
   });
 
   socket.on("typing", (data) => {
