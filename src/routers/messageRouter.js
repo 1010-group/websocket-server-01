@@ -1,5 +1,5 @@
 const express = require("express");
-const Message = require("../models/messageModel");
+const Message = require("../../models/messageModel");
 const router = express.Router();
 
 // Получить историю между двумя пользователями

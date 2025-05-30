@@ -10,9 +10,16 @@ const userSchema = new mongoose.Schema(
     username: {
       type: String,
       required: true,
+
+    },
+    nickname: {
+      type: String,
+      required: true, // отображаемое имя
+      unique: true, // как @id
     },
     image: {
       type: String,
+      required: true,
     },
     password: {
       type: String,
@@ -20,9 +27,11 @@ const userSchema = new mongoose.Schema(
     },
     description: {
       type: String,
+      default: "",
     },
     birthDate: {
       type: Date,
+      required: true,
     },
   },
   {

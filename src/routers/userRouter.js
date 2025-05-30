@@ -1,33 +1,63 @@
 const express = require("express");
 const router = express.Router();
-const User = require("../models/userModel");
+const User = require("../../models/userModel");
 
 // POST /api/users/register
 router.post("/register", async (req, res) => {
   try {
-    const { phone, username, image, password, confirmPassword } = req.body;
-    console.log("req", req.body)
-    if (!phone || !username || !password || !confirmPassword) {
-      return res
-        .status(400)
-        .json({ message: "Barcha majburiy maydonlarni to‘ldiring" });
+    const {
+      phone,
+      username,
+      nickname,
+      image,
+      password,
+      confirmPassword,
+      birthDate,
+      description,
+    } = req.body;
+
+    if (!phone || !username || !nickname || !password || !confirmPassword || !image || !birthDate) {
+      return res.status(400).json({ message: "Barcha majburiy maydonlarni to‘ldiring" });
     }
 
     if (password !== confirmPassword) {
       return res.status(400).json({ message: "Parollar mos emas" });
     }
 
-    const existingUser = await User.findOne({ phone });
-    if (existingUser) {
-      return res
-        .status(400)
-        .json({ message: "Bu telefon raqam allaqachon ro‘45yxatdan o‘tgan" });
+    const existingPhone = await User.findOne({ phone });
+    if (existingPhone) {
+      return res.status(400).json({ message: "Bu telefon raqam allaqachon ro‘yxatdan o‘tgan" });
     }
 
-    const user = new User({ phone, username, image, password });
+    const existingNickname = await User.findOne({ nickname });
+    if (existingNickname) {
+      return res.status(400).json({ message: "Bu nickname band" });
+    }
+
+    const user = new User({
+      phone,
+      username,
+      nickname,
+      image,
+      password,
+      birthDate,
+      description,
+    });
+
     await user.save();
 
-    res.status(201).json({ message: "Foydalanuvchi yaratildi", user });
+    res.status(201).json({
+      message: "Foydalanuvchi yaratildi",
+      user: {
+        _id: user._id,
+        phone: user.phone,
+        username: user.username,
+        nickname: user.nickname,
+        image: user.image,
+        description: user.description,
+        birthDate: user.birthDate,
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Serverda xatolik", error });
   }
@@ -35,27 +65,31 @@ router.post("/register", async (req, res) => {
 
 // POST /api/users/login
 router.post("/login", async (req, res) => {
+  const { phone, password } = req.body;
+
   try {
-    const { phone, password } = req.body;
-
-    if (!phone || !password) {
-      return res.status(400).json({ message: "Telefon va parol majburiy" });
-    }
-
     const user = await User.findOne({ phone });
-    if (!user) {
-      return res.status(400).json({ message: "Foydalanuvchi topilmadi" });
+
+    if (!user || user.password !== password) {
+      return res.status(400).json({ message: "Noto‘g‘ri telefon yoki parol" });
     }
 
-    if (user.password !== password) {
-      return res.status(400).json({ message: "Parol noto‘g‘ri" });
-    }
-
-    res.status(200).json({ message: "Login muvaffaqiyatli", user });
+    res.status(200).json({
+      message: "Tizimga muvaffaqiyatli kirdingiz",
+      token: "test-token", // или реальный JWT
+      user: {
+        _id: user._id,
+        phone: user.phone,
+        username: user.username,
+        nickname: user.nickname,
+        image: user.image,
+        description: user.description,
+        birthDate: user.birthDate,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ message: "Server xatosi", error });
+    res.status(500).json({ message: "Server xatoligi", error });
   }
 });
-
 
 module.exports = router;
