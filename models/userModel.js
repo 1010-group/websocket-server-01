@@ -12,14 +12,15 @@ const userSchema = new mongoose.Schema(
       required: true,
 
     },
-    nickname: {
+    fullName: {
       type: String,
       required: true, // отображаемое имя
       unique: true, // как @id
     },
     image: {
       type: String,
-      required: true,
+      default:
+        "https://cdn3d.iconscout.com/3d/premium/thumb/user-3d-illustration-download-in-png-blend-fbx-gltf-file-formats--avatar-profile-account-objects-pack-tools-equipment-illustrations-3408818@0.png?f=webp",
     },
     password: {
       type: String,

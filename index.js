@@ -9,7 +9,17 @@ const Message = require("./models/messageModel");
 connectDB();
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "https://websocket-client-01.onrender.com",
+      "http://localhost:5173",
+      "http://localhost:5174",
+    ],
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
 const userRouter = require("./src/routers/userRouter");
@@ -21,27 +31,34 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:5174"],
+    origin: [
+      "https://websocket-client-01.onrender.com",
+      "http://localhost:5173",
+      "http://localhost:5174",
+    ],
     methods: ["GET", "POST"],
     credentials: true,
   },
 });
 
-// Глобальный список онлайн-пользователей
 let onlineUsers = [];
 
 (async () => {
-  const allUsers = await userModel.find({});
-  onlineUsers = allUsers.map((user) => ({
-    _id: user._id.toString(),
-    username: user.username,
-    phone: user.phone,
-    profilePic: user.image,       // <-- исправлено на image
-    description: user.description, // добавлено
-    birthDate: user.birthDate,    // добавлено
-    status: false,
-    typing: false,
-  }));
+  try {
+    const allUsers = await userModel.find({});
+    onlineUsers = allUsers.map((user) => ({
+      _id: user._id.toString(),
+      username: user.username,
+      phone: user.phone,
+      profilePic: user.image,
+      description: user.description || "",
+      birthDate: user.birthDate || null,
+      status: false,
+      typing: false,
+    }));
+  } catch (err) {
+    console.error("Ошибка при инициализации пользователей:", err);
+  }
 })();
 
 io.on("connection", (socket) => {
@@ -73,44 +90,44 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Пользователь присоединился
- socket.on("user_joined", async (user) => {
-  try {
-    const dbUser = await userModel.findById(user._id);
+  socket.on("user_joined", async (user) => {
+    try {
+      const dbUser = await userModel.findById(user._id);
 
-    if (!dbUser) return;
+      if (!dbUser) {
+        console.error("Пользователь не найден:", user._id);
+        return;
+      }
 
-    const fullUser = {
-      _id: dbUser._id.toString(),
-      username: dbUser.username,
-      nickname: dbUser.nickname,
-      phone: dbUser.phone,
-      profilePic: dbUser.image,
-      description: dbUser.description || "",
-      birthDate: dbUser.birthDate || null,
-      status: true,
-      socketId: socket.id,
-      typing: false,
-    };
+      const fullUser = {
+        _id: dbUser._id.toString(),
+        username: dbUser.username,
+        fullName: dbUser.fullName || "",
+        phone: dbUser.phone,
+        profilePic: dbUser.image || "",
+        description: dbUser.description || "",
+        birthDate: dbUser.birthDate || null,
+        status: true,
+        socketId: socket.id,
+        typing: false,
+      };
 
-    const existing = onlineUsers.find((u) => u._id === fullUser._id);
+      const existing = onlineUsers.find((u) => u._id === fullUser._id);
 
-    if (existing) {
-      onlineUsers = onlineUsers.map((u) =>
-        u._id === fullUser._id ? { ...fullUser } : u
-      );
-    } else {
-      onlineUsers.push(fullUser);
+      if (existing) {
+        onlineUsers = onlineUsers.map((u) =>
+          u._id === fullUser._id ? { ...fullUser } : u
+        );
+      } else {
+        onlineUsers.push(fullUser);
+      }
+
+      io.emit("online_users", onlineUsers);
+    } catch (err) {
+      console.error("Ошибка при user_joined:", err);
     }
+  });
 
-    io.emit("online_users", onlineUsers);
-  } catch (err) {
-    console.error("Ошибка при user_joined:", err);
-  }
-});
-
-
-  // Получение сообщения
   socket.on("send_message", async (data) => {
     const receiver = onlineUsers.find((u) => u._id === data.to);
 
@@ -133,7 +150,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Когда кто-то печатает
   socket.on("typing", (data) => {
     const receiver = onlineUsers.find((u) => u._id === data.to);
     if (receiver?.socketId) {
@@ -144,13 +160,17 @@ io.on("connection", (socket) => {
     }
   });
 
-  // При отключении
   socket.on("disconnect", () => {
     onlineUsers = onlineUsers.map((u) =>
       u.socketId === socket.id ? { ...u, status: false, socketId: null } : u
     );
     io.emit("online_users", onlineUsers);
   });
+});
+
+app.use((err, req, res, next) => {
+  console.error("❌ Middleware Error:", err.stack);
+  res.status(500).send({ error: "Internal Server Error" });
 });
 
 server.listen(5000, () => {

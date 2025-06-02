@@ -8,16 +8,18 @@ router.post("/register", async (req, res) => {
     const {
       phone,
       username,
-      nickname,
       image,
-      password,
-      confirmPassword,
+      fullName,
       birthDate,
       description,
+      password,
+      confirmPassword,
     } = req.body;
-
-    if (!phone || !username || !nickname || !password || !confirmPassword || !image || !birthDate) {
-      return res.status(400).json({ message: "Barcha majburiy maydonlarni to‘ldiring" });
+    console.log("req", req.body);
+    if (!phone || !username || !password || !confirmPassword) {
+      return res
+        .status(400)
+        .json({ message: "Barcha majburiy maydonlarni to‘ldiring" });
     }
 
     if (password !== confirmPassword) {
@@ -29,21 +31,15 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ message: "Bu telefon raqam allaqachon ro‘yxatdan o‘tgan" });
     }
 
-    const existingNickname = await User.findOne({ nickname });
-    if (existingNickname) {
-      return res.status(400).json({ message: "Bu nickname band" });
-    }
-
     const user = new User({
       phone,
       username,
-      nickname,
       image,
       password,
+      fullName,
       birthDate,
       description,
     });
-
     await user.save();
 
     res.status(201).json({
@@ -52,7 +48,7 @@ router.post("/register", async (req, res) => {
         _id: user._id,
         phone: user.phone,
         username: user.username,
-        nickname: user.nickname,
+        fullName: user.fullName,
         image: user.image,
         description: user.description,
         birthDate: user.birthDate,
@@ -76,12 +72,12 @@ router.post("/login", async (req, res) => {
 
     res.status(200).json({
       message: "Tizimga muvaffaqiyatli kirdingiz",
-      token: "test-token", // или реальный JWT
+      token: "test-token",
       user: {
         _id: user._id,
         phone: user.phone,
         username: user.username,
-        nickname: user.nickname,
+        fullName: user.fullName,
         image: user.image,
         description: user.description,
         birthDate: user.birthDate,
