@@ -5,8 +5,17 @@ const User = require("../models/userModel");
 // POST /api/users/register
 router.post("/register", async (req, res) => {
   try {
-    const { phone, username, image, password, confirmPassword } = req.body;
-    console.log("req", req.body)
+    const {
+      phone,
+      username,
+      image,
+      fullName,
+      birthDate,
+      description,
+      password,
+      confirmPassword,
+    } = req.body;
+    console.log("req", req.body);
     if (!phone || !username || !password || !confirmPassword) {
       return res
         .status(400)
@@ -24,7 +33,15 @@ router.post("/register", async (req, res) => {
         .json({ message: "Bu telefon raqam allaqachon ro‘45yxatdan o‘tgan" });
     }
 
-    const user = new User({ phone, username, image, password });
+    const user = new User({
+      phone,
+      username,
+      image,
+      password,
+      fullName,
+      birthDate,
+      description,
+    });
     await user.save();
 
     res.status(201).json({ message: "Foydalanuvchi yaratildi", user });

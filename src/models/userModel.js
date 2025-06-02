@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
   {
+    fullName: {
+      type: String,
+      required: true,
+    },
+
     phone: {
       type: String,
       required: true,
@@ -13,6 +18,8 @@ const userSchema = new mongoose.Schema(
     },
     image: {
       type: String,
+      default:
+        "https://cdn3d.iconscout.com/3d/premium/thumb/user-3d-illustration-download-in-png-blend-fbx-gltf-file-formats--avatar-profile-account-objects-pack-tools-equipment-illustrations-3408818@0.png?f=webp",
     },
     password: {
       type: String,
