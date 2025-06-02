@@ -9,7 +9,17 @@ const Message = require("./models/messageModel");
 connectDB();
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "https://websocket-client-01.onrender.com",
+      "http://localhost:5173",
+      "http://localhost:5174",
+    ],
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
 const userRouter = require("./routers/userRouter");
@@ -21,7 +31,11 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:5174", "https://websocket-client-01.onrender.com/"],
+    origin: [
+      "https://websocket-client-01.onrender.com",
+      "http://localhost:5173",
+      "http://localhost:5174",
+    ],
     methods: ["GET", "POST"],
     credentials: true,
   },
