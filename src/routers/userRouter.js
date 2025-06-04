@@ -41,6 +41,10 @@ router.post("/register", async (req, res) => {
       fullName,
       birthDate,
       description,
+      role: "user",
+      isBanned: false,
+      isMuted: false,
+      isWarn: false,
     });
     await user.save();
 

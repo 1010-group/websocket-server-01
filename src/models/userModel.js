@@ -31,6 +31,23 @@ const userSchema = new mongoose.Schema(
     birthDate: {
       type: Date,
     },
+    role: {
+      type: String,
+      default: "user",
+      enum: ["user", "admin", "moderator", "owner"],
+    },
+    isBanned: {
+      type: Boolean,
+      default: false,
+    },
+    isMuted: {
+      type: Boolean,
+      default: false,
+    },
+    isWarn: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
