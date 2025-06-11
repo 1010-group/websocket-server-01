@@ -80,11 +80,25 @@ io.on("connection", (socket) => {
     try {
       const user = await userModel.findById(userId);
       if (!user) {
-        return socket.emit("warn_result", { success: false, message: "User not found" });
+        return socket.emit("warn_result", {
+          success: false,
+          message: "User not found",
+        });
       }
 
       if (user.isBanned) {
-        return socket.emit("warn_result", { success: false, message: "User is already banned" });
+        return socket.emit("warn_result", {
+          success: false,
+          message: "User is already banned",
+        });
+      }
+
+      // ❌ Блокируем предупреждение для owner
+      if (user.role === "owner") {
+        return socket.emit("warn_result", {
+          success: false,
+          message: "You are not allowed to warn an owner",
+        });
       }
 
       user.isWarn = (user.isWarn || 0) + 1;
@@ -97,11 +111,11 @@ io.on("connection", (socket) => {
       // Create notification for warned user
       const notification = await Notification.create({
         userId: user._id,
-        type: user.isBanned ? 'ban' : 'warning',
+        type: user.isBanned ? "ban" : "warning",
         message: user.isBanned
           ? `You have been banned due to receiving 3 warnings`
           : `You received a warning (${user.isWarn}/3)`,
-        fromUser: { _id: null, username: 'System', image: null },
+        fromUser: { _id: null, username: "System", image: null },
         read: false,
       });
 
@@ -158,7 +172,9 @@ io.on("connection", (socket) => {
   // User joined
   socket.on("user_joined", async (user) => {
     onlineUsers = onlineUsers.map((u) =>
-      u._id === user._id ? { ...u, status: true, socketId: socket.id, image: user.image } : u
+      u._id === user._id
+        ? { ...u, status: true, socketId: socket.id, image: user.image }
+        : u
     );
     console.log("Emitting online_users:", onlineUsers);
     io.emit("online_users", onlineUsers);
@@ -203,7 +219,7 @@ io.on("connection", (socket) => {
       // Create notification for receiver
       const notification = await Notification.create({
         userId: data.to,
-        type: 'message',
+        type: "message",
         message: `New message from ${sender.username}`,
         fromUser: {
           _id: sender._id.toString(),
