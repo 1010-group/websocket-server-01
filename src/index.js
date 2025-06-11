@@ -164,26 +164,26 @@ io.on("connection", (socket) => {
     io.emit("online_users", onlineUsers);
 
     // Notify friends (assuming friends are stored in user model)
-    const currentUser = await userModel.findById(user._id);
-    if (currentUser.friends) {
-      for (const friendId of currentUser.friends) {
-        const friend = onlineUsers.find((u) => u._id === friendId.toString());
-        if (friend?.socketId) {
-          const notification = await Notification.create({
-            userId: friendId,
-            type: 'message',
-            message: `${user.username} is now online`,
-            fromUser: {
-              _id: user._id,
-              username: user.username,
-              image: user.image,
-            },
-            read: false,
-          });
-          io.to(friend.socketId).emit("new_notification", notification);
-        }
-      }
-    }
+    // const currentUser = await userModel.findById(user._id);
+    // if (currentUser?.friends) {
+    //   for (const friendId of currentUser?.friends) {
+    //     const friend = onlineUsers.find((u) => u._id === friendId.toString());
+    //     if (friend?.socketId) {
+    //       const notification = await Notification.create({
+    //         userId: friendId,
+    //         type: 'message',
+    //         message: `${user.username} is now online`,
+    //         fromUser: {
+    //           _id: user._id,
+    //           username: user.username,
+    //           image: user.image,
+    //         },
+    //         read: false,
+    //       });
+    //       io.to(friend.socketId).emit("new_notification", notification);
+    //     }
+    //   }
+    // }
   });
 
   // Send message
