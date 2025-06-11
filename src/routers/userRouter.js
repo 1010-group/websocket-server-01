@@ -15,42 +15,64 @@ router.post("/register", async (req, res) => {
       password,
       confirmPassword,
     } = req.body;
-    console.log("req", req.body);
-    if (!phone || !username || !password || !confirmPassword) {
+
+    console.log("req.body", req.body); // Debug log
+
+    // Check required fields
+    if (!phone || !username || !password || !confirmPassword || !fullName) {
       return res
         .status(400)
-        .json({ message: "Barcha majburiy maydonlarni to‘ldiring" });
+        .json({ message: "All required fields must be filled" });
     }
 
     if (password !== confirmPassword) {
-      return res.status(400).json({ message: "Parollar mos emas" });
+      return res.status(400).json({ message: "Passwords do not match" });
     }
 
     const existingUser = await User.findOne({ phone });
     if (existingUser) {
       return res
         .status(400)
-        .json({ message: "Bu telefon raqam allaqachon ro‘45yxatdan o‘tgan" });
+        .json({ message: "This phone number is already registered" });
     }
 
+    // Create user
     const user = new User({
       phone,
       username,
       image,
-      password,
       fullName,
       birthDate,
       description,
-      role: "user",
-      isBanned: false,
-      isMuted: false,
-      isWarn: false,
+      password,
     });
+
     await user.save();
 
-    res.status(201).json({ message: "Foydalanuvchi yaratildi", user });
+    res.status(201).json({ message: "User created", user });
   } catch (error) {
-    res.status(500).json({ message: "Serverda xatolik", error });
+    res.status(500).json({ message: "Server error", error });
+  }
+});
+
+// POST /api/users/warn/:id — issue a warning
+router.post("/warn/:id", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.isWarn += 1;
+
+    if (user.isWarn >= 3) {
+      user.isBanned = true;
+      await user.save();
+      return res.status(200).json({ message: "User received 3 warnings and was banned", banned: true });
+    }
+
+    await user.save();
+    res.status(200).json({ message: `Warning issued. Total: ${user.isWarn}/3` });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
   }
 });
 
@@ -60,21 +82,41 @@ router.post("/login", async (req, res) => {
     const { phone, password } = req.body;
 
     if (!phone || !password) {
-      return res.status(400).json({ message: "Telefon va parol majburiy" });
+      return res.status(400).json({ message: "Phone and password are required" });
     }
 
     const user = await User.findOne({ phone });
     if (!user) {
-      return res.status(400).json({ message: "Foydalanuvchi topilmadi" });
+      return res.status(400).json({ message: "User not found" });
+    }
+
+    if (user.isBanned) {
+      return res.status(403).json({ message: "This user is banned" });
     }
 
     if (user.password !== password) {
-      return res.status(400).json({ message: "Parol noto‘g‘ri" });
+      return res.status(400).json({ message: "Incorrect password" });
     }
 
-    res.status(200).json({ message: "Login muvaffaqiyatli", user });
+    res.status(200).json({ message: "Login successful", user });
   } catch (error) {
-    res.status(500).json({ message: "Server xatosi", error });
+    res.status(500).json({ message: "Server error", error });
+  }
+});
+
+// POST /api/users/unban/:id
+router.post("/unban/:id", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.isBanned = false;
+    user.isWarn = 0;
+    await user.save();
+
+    res.json({ message: "User unbanned", user });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
   }
 });
 
