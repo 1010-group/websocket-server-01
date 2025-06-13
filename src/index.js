@@ -177,7 +177,6 @@ io.on("connection", (socket) => {
         ? { ...u, status: true, socketId: socket.id, image: user.image }
         : u
     );
-    console.log("Emitting online_users:", onlineUsers);
     io.emit("online_users", onlineUsers);
 
     // Notify friends (assuming friends are stored in user model)
@@ -268,6 +267,107 @@ io.on("connection", (socket) => {
     );
     io.emit("online_users", onlineUsers);
     console.log("🔌 Disconnected:", socket.id);
+  });
+
+  socket.on("make_admin", async ({ userId, SelectedId, role }) => {
+    try {
+      const issuer = await userModel.findById(userId);
+      const target = await userModel.findById(SelectedId);
+
+      if (!issuer || !target) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Пользователь не найден",
+        });
+      }
+
+      // 🔐 Защита: нельзя менять роль владельца
+      if (target.role === "owner") {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Роль владельца нельзя изменить",
+        });
+      }
+
+      // 🔒 Только owner и admin могут менять роли
+      if (issuer.role !== "owner" && issuer.role !== "admin") {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "У вас нет прав для изменения ролей",
+        });
+      }
+
+      // 🛠 Изменяем роль
+      target.role = role;
+      await target.save();
+
+      const fromName = `${issuer.role === "owner" ? "Owner" : "Admin"} ${
+        issuer.username
+      }`;
+      const toName = `${target.username}`;
+      const roleRus =
+        role === "admin"
+          ? "Администратором"
+          : role === "moderator"
+          ? "Модератором"
+          : "Пользователем";
+
+      // ✅ 1. Отправляем всем (кроме назначившего и назначенного)
+      onlineUsers.forEach((u) => {
+        if (
+          u._id !== issuer._id.toString() &&
+          u._id !== target._id.toString() &&
+          u.socketId
+        ) {
+          io.to(u.socketId).emit("broadcast_message", {
+            type: "info",
+            message: `[Всем] ${fromName} назначил(-а) ${toName} на роль ${roleRus}`,
+          });
+        }
+      });
+
+      // ✅ 2. Отправляем назначенному
+      const targetSocket = onlineUsers.find(
+        (u) => u._id === target._id.toString()
+      )?.socketId;
+      if (targetSocket) {
+        io.to(targetSocket).emit("personal_message", {
+          type: "warning",
+          message: `[SelectedUser] ${fromName} изменил вашу роль: ${roleRus}`,
+        });
+      }
+
+      // ✅ 3. Отправляем назначившему
+      socket.emit("admin_result", {
+        success: true,
+        message: `[Мне] Вы изменили игроку ${toName} роль: ${roleRus}`,
+        user: {
+          _id: target._id.toString(),
+          username: target.username,
+          role: target.role,
+          image: target.image,
+        },
+      });
+
+      // (Опционально) создаём запись в Notification:
+      // await Notification.create({
+      //   userId: target._id,
+      //   type: "role_change",
+      //   message: `${fromName} изменил вашу роль: ${roleRus}`,
+      //   fromUser: {
+      //     _id: issuer._id,
+      //     username: issuer.username,
+      //     image: issuer.image,
+      //   },
+      //   read: false,
+      // });
+    } catch (err) {
+      console.error("❌ Ошибка в make_admin:", err);
+      socket.emit("admin_result", {
+        success: false,
+        message: "Ошибка сервера при смене роли",
+      });
+    }
   });
 });
 
