@@ -54,6 +54,7 @@ let onlineUsers = [];
     username: user.username,
     phone: user.phone,
     image: user.image,
+    role: user.role,
     status: false,
     typing: false,
   }));
