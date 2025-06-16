@@ -268,9 +268,7 @@ io.on("connection", (socket) => {
     io.emit("online_users", onlineUsers);
     console.log("🔌 Disconnected:", socket.id);
   });
-
   socket.on("make_admin", async ({ userId, SelectedId, role }) => {
-    console.log("CHANGE ROLE: ", { userId, SelectedId, role });
     try {
       const issuer = await userModel.findById(userId);
       const target = await userModel.findById(SelectedId);
@@ -278,70 +276,89 @@ io.on("connection", (socket) => {
       if (!issuer || !target) {
         return socket.emit("admin_result", {
           success: false,
-          message: "Пользователь не найден",
+          message: "Foydalanuvchi topilmadi",
         });
       }
 
-      // 🔐 Защита: нельзя менять роль владельца
+      if (!["user", "admin", "moderator"].includes(role)) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Noto‘g‘ri rol tanlandi",
+        });
+      }
+
+      // 🔒 faqat admin va owner
+      if (!["owner", "admin"].includes(issuer.role)) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Sizda ruxsat yo‘q",
+        });
+      }
+
+      // 🔐 owner ga tegmaysan
       if (target.role === "owner") {
         return socket.emit("admin_result", {
           success: false,
-          message: "Роль владельца нельзя изменить",
+          message: "Owner rolini o‘zgartirish mumkin emas",
         });
       }
 
-      // 🔒 Только owner и admin могут менять роли
-      if (issuer.role !== "owner" && issuer.role !== "admin") {
+      // ❌ Agar allaqachon shu rol bo‘lsa
+      if (target.role === role) {
         return socket.emit("admin_result", {
           success: false,
-          message: "У вас нет прав для изменения ролей",
+          message: `U foydalanuvchi allaqachon ${role} bo‘lgan`,
         });
       }
 
-      // 🛠 Изменяем роль
+      // ✅ Bazani yangilaymiz
       target.role = role;
       await target.save();
 
-      const fromName = `${issuer.role === "owner" ? "Owner" : "Admin"} ${
-        issuer.username
-      }`;
-      const toName = `${target.username}`;
-      const roleRus =
-        role === "admin"
-          ? "Администратором"
-          : role === "moderator"
-          ? "Модератором"
-          : "Пользователем";
+      // 🔄 onlineUsers list'ini yangilaymiz (agar bor bo‘lsa)
+      onlineUsers = onlineUsers.map((u) =>
+        u._id === target._id.toString() ? { ...u, role: role } : u
+      );
+      io.emit("online_users", onlineUsers);
 
-      // ✅ 1. Отправляем всем (кроме назначившего и назначенного)
+      // 🔔 Hamma userlarga umumiy e'lon
+      const roleNameUz = {
+        user: "oddiy foydalanuvchi",
+        admin: "administrator",
+        moderator: "moderator",
+      }[role];
+
+      const fromName = issuer.username;
+      const toName = target.username;
+
       onlineUsers.forEach((u) => {
         if (
+          u.socketId &&
           u._id !== issuer._id.toString() &&
-          u._id !== target._id.toString() &&
-          u.socketId
+          u._id !== target._id.toString()
         ) {
           io.to(u.socketId).emit("broadcast_message", {
             type: "info",
-            message: `[System] ${fromName} назначил(-а) ${toName} на роль ${roleRus}`,
+            message: `[System] ${fromName} ${toName} ni ${roleNameUz} qildi`,
           });
         }
       });
 
-      // ✅ 2. Отправляем назначенному
+      // 🎯 Target userga bildirishnoma
       const targetSocket = onlineUsers.find(
         (u) => u._id === target._id.toString()
       )?.socketId;
       if (targetSocket) {
         io.to(targetSocket).emit("personal_message", {
           type: "warning",
-          message: `[System] ${fromName} изменил вашу роль: ${roleRus}`,
+          message: `[System] Sizning rolingiz ${roleNameUz} qilib o‘zgartirildi`,
         });
       }
 
-      // ✅ 3. Отправляем назначившему
+      // 🔙 Issuerga natijani qaytaramiz
       socket.emit("admin_result", {
         success: true,
-        message: `[System] Вы изменили игроку ${toName} роль: ${roleRus}`,
+        message: `Siz ${toName} ni ${roleNameUz} qildingiz`,
         user: {
           _id: target._id.toString(),
           username: target.username,
@@ -350,10 +367,10 @@ io.on("connection", (socket) => {
         },
       });
     } catch (err) {
-      console.error("❌ Ошибка в make_admin:", err);
+      console.error("❌ make_admin xatosi:", err);
       socket.emit("admin_result", {
         success: false,
-        message: "Ошибка сервера при смене роли",
+        message: "Server xatosi, rolni o‘zgartirib bo‘lmadi",
       });
     }
   });
