@@ -270,6 +270,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("make_admin", async ({ userId, SelectedId, role }) => {
+    console.log("CHANGE ROLE: ", { userId, SelectedId, role });
     try {
       const issuer = await userModel.findById(userId);
       const target = await userModel.findById(SelectedId);
@@ -321,7 +322,7 @@ io.on("connection", (socket) => {
         ) {
           io.to(u.socketId).emit("broadcast_message", {
             type: "info",
-            message: `[Всем] ${fromName} назначил(-а) ${toName} на роль ${roleRus}`,
+            message: `[System] ${fromName} назначил(-а) ${toName} на роль ${roleRus}`,
           });
         }
       });
@@ -333,14 +334,14 @@ io.on("connection", (socket) => {
       if (targetSocket) {
         io.to(targetSocket).emit("personal_message", {
           type: "warning",
-          message: `[SelectedUser] ${fromName} изменил вашу роль: ${roleRus}`,
+          message: `[System] ${fromName} изменил вашу роль: ${roleRus}`,
         });
       }
 
       // ✅ 3. Отправляем назначившему
       socket.emit("admin_result", {
         success: true,
-        message: `[Мне] Вы изменили игроку ${toName} роль: ${roleRus}`,
+        message: `[System] Вы изменили игроку ${toName} роль: ${roleRus}`,
         user: {
           _id: target._id.toString(),
           username: target.username,
@@ -348,19 +349,6 @@ io.on("connection", (socket) => {
           image: target.image,
         },
       });
-
-      // (Опционально) создаём запись в Notification:
-      // await Notification.create({
-      //   userId: target._id,
-      //   type: "role_change",
-      //   message: `${fromName} изменил вашу роль: ${roleRus}`,
-      //   fromUser: {
-      //     _id: issuer._id,
-      //     username: issuer.username,
-      //     image: issuer.image,
-      //   },
-      //   read: false,
-      // });
     } catch (err) {
       console.error("❌ Ошибка в make_admin:", err);
       socket.emit("admin_result", {
