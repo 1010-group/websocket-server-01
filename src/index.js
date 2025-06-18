@@ -377,6 +377,7 @@ io.on("connection", (socket) => {
 
   socket.on("ban_user", async ({ userId, SelectedId, reason }) => {
     try {
+      console.log("ban_user", { userId, SelectedId, reason });
       const issuer = await userModel.findById(userId);
       const target = await userModel.findById(SelectedId);
 
@@ -399,11 +400,11 @@ io.on("connection", (socket) => {
       if (target.role === "owner") {
         return socket.emit("admin_result", {
           success: false,
-          message: "Owner rolini o‘zgartirish mumkin emas",
+          message: "Ownerga Ban berish mumkin emas",
         });
       }
 
-      // ❌ Agar allaqachon shu rol bo‘lsa
+      // ❌ Agar allaqachon shu akkaunt ban olgan bo‘lsa
       if (target.isBanned) {
         return socket.emit("admin_result", {
           success: false,
@@ -461,12 +462,10 @@ io.on("connection", (socket) => {
           image: target.image,
         },
       });
-
-
-    } catch(e) {
-      console.log("SERVER ERROR", e)
+    } catch (e) {
+      console.log("SERVER ERROR", e);
     }
-  })
+  });
 });
 
 server.listen(5000, () => {
