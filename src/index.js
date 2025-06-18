@@ -404,6 +404,14 @@ io.on("connection", (socket) => {
         });
       }
 
+            // 🔐 owner ga tegmaysan
+      if (target.role === "admin" && issuer.role === "admin") {
+        return socket.emit("ban_result", {
+          success: false,
+          message: "Admin Adminga Ban berish mumkin emas",
+        });
+      }
+
       // ❌ Agar allaqachon shu akkaunt ban olgan bo‘lsa
       if (target.isBanned) {
         return socket.emit("ban_result", {
