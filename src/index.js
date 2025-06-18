@@ -178,7 +178,6 @@ io.on("connection", (socket) => {
         : u
     );
     io.emit("online_users", onlineUsers);
-
     // Notify friends (assuming friends are stored in user model)
     // const currentUser = await userModel.findById(user._id);
     // if (currentUser?.friends) {
@@ -268,6 +267,7 @@ io.on("connection", (socket) => {
     io.emit("online_users", onlineUsers);
     console.log("🔌 Disconnected:", socket.id);
   });
+
   socket.on("make_admin", async ({ userId, SelectedId, role }) => {
     try {
       const issuer = await userModel.findById(userId);
@@ -374,6 +374,99 @@ io.on("connection", (socket) => {
       });
     }
   });
+
+  socket.on("ban_user", async ({ userId, SelectedId, reason }) => {
+    try {
+      const issuer = await userModel.findById(userId);
+      const target = await userModel.findById(SelectedId);
+
+      if (!issuer || !target) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Foydalanuvchi topilmadi",
+        });
+      }
+
+      // 🔒 faqat admin va owner
+      if (!["owner", "admin"].includes(issuer.role)) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Sizda ruxsat yo‘q",
+        });
+      }
+
+      // 🔐 owner ga tegmaysan
+      if (target.role === "owner") {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Owner rolini o‘zgartirish mumkin emas",
+        });
+      }
+
+      // ❌ Agar allaqachon shu rol bo‘lsa
+      if (target.isBanned) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: `U foydalanuvchi allaqachon ban bo‘lgan`,
+        });
+      }
+
+      // ✅ Bazani yangilaymiz
+      target.isBanned = true;
+      target.isWarn = 0; // Reset warnings on ban
+      await target.save();
+
+      // 🔄 onlineUsers list'ini yangilaymiz (agar bor bo‘lsa)
+      onlineUsers = onlineUsers.map((u) =>
+        u._id === target._id.toString() ? { ...u, isBanned: true } : u
+      );
+      io.emit("online_users", onlineUsers);
+
+      // 🔔 Hamma userlarga umumiy e'lon
+      const fromName = issuer.username;
+      const toName = target.username;
+
+      onlineUsers.forEach((u) => {
+        if (
+          u.socketId &&
+          u._id !== issuer._id.toString() &&
+          u._id !== target._id.toString()
+        ) {
+          io.to(u.socketId).emit("broadcast_message", {
+            type: "info",
+            message: `[System] ${fromName} ${toName} ni ban qildi`,
+          });
+        }
+      });
+
+      // 🎯 Target userga bildirishnoma
+      const targetSocket = onlineUsers.find(
+        (u) => u._id === target._id.toString()
+      )?.socketId;
+      if (targetSocket) {
+        io.to(targetSocket).emit("personal_message", {
+          type: "warning",
+          message: `[System] Siz ${issuer?.username} tomonidan ban qilindingiz`,
+        });
+      }
+
+      // 🔙 Issuerga natijani qaytaramiz
+      socket.emit("admin_result", {
+        success: true,
+        message: `Siz ${toName} ni ban qildingiz`,
+        user: {
+          _id: target._id.toString(),
+          username: target.username,
+          role: target.role,
+          image: target.image,
+        },
+      });
+
+
+    } catch(e) {
+      console.log("SERVER ERROR", e)
+    }
+  })
 });
 
 server.listen(5000, () => {
