@@ -288,7 +288,7 @@ io.on("connection", (socket) => {
       }
 
       // 🔒 faqat admin va owner
-      if (!["owner", "admin"].includes(issuer.role)) {
+      if (!["owner"].includes(issuer.role)) {
         return socket.emit("admin_result", {
           success: false,
           message: "Sizda ruxsat yo‘q",
