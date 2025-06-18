@@ -382,7 +382,7 @@ io.on("connection", (socket) => {
       const target = await userModel.findById(SelectedId);
 
       if (!issuer || !target) {
-        return socket.emit("admin_result", {
+        return socket.emit("ban_result", {
           success: false,
           message: "Foydalanuvchi topilmadi",
         });
@@ -390,7 +390,7 @@ io.on("connection", (socket) => {
 
       // 🔒 faqat admin va owner
       if (!["owner", "admin"].includes(issuer.role)) {
-        return socket.emit("admin_result", {
+        return socket.emit("ban_result", {
           success: false,
           message: "Sizda ruxsat yo‘q",
         });
@@ -398,7 +398,7 @@ io.on("connection", (socket) => {
 
       // 🔐 owner ga tegmaysan
       if (target.role === "owner") {
-        return socket.emit("admin_result", {
+        return socket.emit("ban_result", {
           success: false,
           message: "Ownerga Ban berish mumkin emas",
         });
@@ -406,7 +406,7 @@ io.on("connection", (socket) => {
 
       // ❌ Agar allaqachon shu akkaunt ban olgan bo‘lsa
       if (target.isBanned) {
-        return socket.emit("admin_result", {
+        return socket.emit("ban_result", {
           success: false,
           message: `U foydalanuvchi allaqachon ban bo‘lgan`,
         });
@@ -452,7 +452,7 @@ io.on("connection", (socket) => {
       }
 
       // 🔙 Issuerga natijani qaytaramiz
-      socket.emit("admin_result", {
+      socket.emit("ban_result", {
         success: true,
         message: `Siz ${toName} ni ban qildingiz`,
         user: {
