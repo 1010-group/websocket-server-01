@@ -2,7 +2,6 @@ const express = require("express");
 const router = express.Router();
 const User = require("../models/userModel");
 
-// POST /api/users/register
 router.post("/register", async (req, res) => {
   try {
     const {
@@ -16,9 +15,8 @@ router.post("/register", async (req, res) => {
       confirmPassword,
     } = req.body;
 
-    console.log("req.body", req.body); // Debug log
+    console.log("req.body", req.body);
 
-    // Check required fields
     if (!phone || !username || !password || !confirmPassword || !fullName) {
       return res
         .status(400)
@@ -36,7 +34,6 @@ router.post("/register", async (req, res) => {
         .json({ message: "This phone number is already registered" });
     }
 
-    // Create user
     const user = new User({
       phone,
       username,
@@ -55,7 +52,6 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// POST /api/users/warn/:id — issue a warning
 router.post("/warn/:id", async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -76,7 +72,6 @@ router.post("/warn/:id", async (req, res) => {
   }
 });
 
-// POST /api/users/login
 router.post("/login", async (req, res) => {
   try {
     const { phone, password } = req.body;
@@ -104,7 +99,6 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// POST /api/users/unban/:id
 router.post("/unban/:id", async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -117,6 +111,34 @@ router.post("/unban/:id", async (req, res) => {
     res.json({ message: "User unbanned", user });
   } catch (error) {
     res.status(500).json({ message: "Server error", error });
+  }
+});
+router.put('/mute/:id', async (req, res) => {
+  try {
+    const user = await userModel.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.isMuted = true;
+    await user.save();
+
+    res.json({ success: true, message: 'User muted', user });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// PUT /api/users/unmute/:id
+router.put('/unmute/:id', async (req, res) => {
+  try {
+    const user = await userModel.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.isMuted = false;
+    await user.save();
+
+    res.json({ success: true, message: 'User unmuted', user });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' });
   }
 });
 

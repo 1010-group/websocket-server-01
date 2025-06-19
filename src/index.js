@@ -18,6 +18,7 @@ app.use(
       "http://localhost:5174",
     ],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE"],
   })
 );
 
@@ -44,7 +45,6 @@ const io = new Server(server, {
   },
 });
 
-// Global list of online users
 let onlineUsers = [];
 
 (async () => {
@@ -94,7 +94,6 @@ io.on("connection", (socket) => {
         });
       }
 
-      // ❌ Блокируем предупреждение для owner
       if (user.role === "owner") {
         return socket.emit("warn_result", {
           success: false,
@@ -109,7 +108,6 @@ io.on("connection", (socket) => {
 
       await user.save();
 
-      // Create notification for warned user
       const notification = await Notification.create({
         userId: user._id,
         type: user.isBanned ? "ban" : "warning",
@@ -120,7 +118,6 @@ io.on("connection", (socket) => {
         read: false,
       });
 
-      // Notify the admin who issued the warning
       socket.emit("warn_result", {
         success: true,
         message: user.isBanned
@@ -136,7 +133,6 @@ io.on("connection", (socket) => {
         },
       });
 
-      // Notify the warned user if they are online
       const warnedUser = onlineUsers.find((u) => u._id === userId);
       if (warnedUser?.socketId) {
         io.to(warnedUser.socketId).emit("warn_status", {
@@ -154,7 +150,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Get message history between two users
   socket.on("get_history", async ({ from, to }) => {
     try {
       const messages = await Message.find({
@@ -170,7 +165,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // User joined
   socket.on("user_joined", async (user) => {
     onlineUsers = onlineUsers.map((u) =>
       u._id === user._id
@@ -178,30 +172,8 @@ io.on("connection", (socket) => {
         : u
     );
     io.emit("online_users", onlineUsers);
-    // Notify friends (assuming friends are stored in user model)
-    // const currentUser = await userModel.findById(user._id);
-    // if (currentUser?.friends) {
-    //   for (const friendId of currentUser?.friends) {
-    //     const friend = onlineUsers.find((u) => u._id === friendId.toString());
-    //     if (friend?.socketId) {
-    //       const notification = await Notification.create({
-    //         userId: friendId,
-    //         type: 'message',
-    //         message: `${user.username} is now online`,
-    //         fromUser: {
-    //           _id: user._id,
-    //           username: user.username,
-    //           image: user.image,
-    //         },
-    //         read: false,
-    //       });
-    //       io.to(friend.socketId).emit("new_notification", notification);
-    //     }
-    //   }
-    // }
   });
 
-  // Send message
   socket.on("send_message", async (data) => {
     const receiver = onlineUsers.find((u) => u._id === data.to);
 
@@ -215,7 +187,6 @@ io.on("connection", (socket) => {
 
       const sender = await userModel.findById(data.from);
 
-      // Create notification for receiver
       const notification = await Notification.create({
         userId: data.to,
         type: "message",
@@ -240,7 +211,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Typing event
   socket.on("typing", (data) => {
     const receiver = onlineUsers.find((u) => u._id === data.to);
     if (receiver?.socketId) {
@@ -251,7 +221,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // User left
   socket.on("user_left", (user) => {
     onlineUsers = onlineUsers.map((u) =>
       u._id === user._id ? { ...u, status: false, socketId: null } : u
@@ -259,7 +228,6 @@ io.on("connection", (socket) => {
     io.emit("online_users", onlineUsers);
   });
 
-  // On disconnect
   socket.on("disconnect", () => {
     onlineUsers = onlineUsers.map((u) =>
       u.socketId === socket.id ? { ...u, status: false, socketId: null } : u
@@ -287,7 +255,6 @@ io.on("connection", (socket) => {
         });
       }
 
-      // 🔒 faqat admin va owner
       if (!["owner"].includes(issuer.role)) {
         return socket.emit("admin_result", {
           success: false,
@@ -295,7 +262,6 @@ io.on("connection", (socket) => {
         });
       }
 
-      // 🔐 owner ga tegmaysan
       if (target.role === "owner") {
         return socket.emit("admin_result", {
           success: false,
@@ -303,7 +269,6 @@ io.on("connection", (socket) => {
         });
       }
 
-      // ❌ Agar allaqachon shu rol bo‘lsa
       if (target.role === role) {
         return socket.emit("admin_result", {
           success: false,
@@ -311,17 +276,14 @@ io.on("connection", (socket) => {
         });
       }
 
-      // ✅ Bazani yangilaymiz
       target.role = role;
       await target.save();
 
-      // 🔄 onlineUsers list'ini yangilaymiz (agar bor bo‘lsa)
       onlineUsers = onlineUsers.map((u) =>
         u._id === target._id.toString() ? { ...u, role: role } : u
       );
       io.emit("online_users", onlineUsers);
 
-      // 🔔 Hamma userlarga umumiy e'lon
       const roleNameUz = {
         user: "oddiy foydalanuvchi",
         admin: "administrator",
@@ -344,7 +306,6 @@ io.on("connection", (socket) => {
         }
       });
 
-      // 🎯 Target userga bildirishnoma
       const targetSocket = onlineUsers.find(
         (u) => u._id === target._id.toString()
       )?.socketId;
@@ -355,7 +316,6 @@ io.on("connection", (socket) => {
         });
       }
 
-      // 🔙 Issuerga natijani qaytaramiz
       socket.emit("admin_result", {
         success: true,
         message: `Siz ${toName} ni ${roleNameUz} qildingiz`,
@@ -388,7 +348,6 @@ io.on("connection", (socket) => {
         });
       }
 
-      // 🔒 faqat admin va owner
       if (!["owner", "admin"].includes(issuer.role)) {
         return socket.emit("ban_result", {
           success: false,
@@ -396,7 +355,6 @@ io.on("connection", (socket) => {
         });
       }
 
-      // 🔐 owner ga tegmaysan
       if (target.role === "owner") {
         return socket.emit("ban_result", {
           success: false,
@@ -404,7 +362,6 @@ io.on("connection", (socket) => {
         });
       }
 
-            // 🔐 owner ga tegmaysan
       if (target.role === "admin" && issuer.role === "admin") {
         return socket.emit("ban_result", {
           success: false,
@@ -412,7 +369,6 @@ io.on("connection", (socket) => {
         });
       }
 
-      // ❌ Agar allaqachon shu akkaunt ban olgan bo‘lsa
       if (target.isBanned) {
         return socket.emit("ban_result", {
           success: false,
@@ -420,18 +376,15 @@ io.on("connection", (socket) => {
         });
       }
 
-      // ✅ Bazani yangilaymiz
       target.isBanned = true;
-      target.isWarn = 0; // Reset warnings on ban
+      target.isWarn = 0;
       await target.save();
 
-      // 🔄 onlineUsers list'ini yangilaymiz (agar bor bo‘lsa)
       onlineUsers = onlineUsers.map((u) =>
         u._id === target._id.toString() ? { ...u, isBanned: true } : u
       );
       io.emit("online_users", onlineUsers);
 
-      // 🔔 Hamma userlarga umumiy e'lon
       const fromName = issuer.username;
       const toName = target.username;
 
@@ -448,7 +401,6 @@ io.on("connection", (socket) => {
         }
       });
 
-      // 🎯 Target userga bildirishnoma
       const targetSocket = onlineUsers.find(
         (u) => u._id === target._id.toString()
       )?.socketId;
@@ -459,7 +411,6 @@ io.on("connection", (socket) => {
         });
       }
 
-      // 🔙 Issuerga natijani qaytaramiz
       socket.emit("ban_result", {
         success: true,
         message: `Siz ${toName} ni ban qildingiz`,
