@@ -286,7 +286,7 @@ io.on("connection", (socket) => {
           message: "Noto‘g‘ri rol tanlandi",
         });
       }
-
+      // PAWNO
       // 🔒 faqat admin va owner
       if (!["owner"].includes(issuer.role)) {
         return socket.emit("admin_result", {
@@ -404,7 +404,7 @@ io.on("connection", (socket) => {
         });
       }
 
-            // 🔐 owner ga tegmaysan
+      // 🔐 owner ga tegmaysan
       if (target.role === "admin" && issuer.role === "admin") {
         return socket.emit("ban_result", {
           success: false,
@@ -472,6 +472,28 @@ io.on("connection", (socket) => {
       });
     } catch (e) {
       console.log("SERVER ERROR", e);
+    }
+  });
+
+  socket.on("mute_admin", async ({ userID, selectedUser, reason }) => {
+    try {
+      const beruvchi = await userModel.findById(userID);
+      const oluvchi = await userModel.findById(selectedUser);
+
+      if (!beruvchi || !oluvchi) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Foydalanuvchi topilmadi",
+        });
+      }
+      if (!["owner", "admin", "moderator"].includes(beruvchi.role)) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Sizda unday ruxsat yoq",
+        });
+      }
+    } catch (e) {
+      console.error("websocket mute_admin error: ", e);
     }
   });
 });
