@@ -429,6 +429,7 @@ io.on("connection", (socket) => {
       onlineUsers = onlineUsers.map((u) =>
         u._id === target._id.toString() ? { ...u, isBanned: true } : u
       );
+
       io.emit("online_users", onlineUsers);
 
       // 🔔 Hamma userlarga umumiy e'lon
@@ -492,6 +493,32 @@ io.on("connection", (socket) => {
           message: "Sizda unday ruxsat yoq",
         });
       }
+
+      if (
+        beruvchi.role === "moderator" &&
+        ["owner", "admin"].includes(oluvchi.role)
+      ) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Sizda unday ruxsat yoq",
+        });
+      }
+
+      if (
+        beruvchi.role === "admin" &&
+        ["owner", "admin"].includes(oluvchi.role)
+      ) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Sizda unday ruxsat yoq",
+        });
+      }
+
+      oluvchi.isMuted = true
+      await oluvchi.save()         
+      onlineUsers = onlineUsers.map((user) => user._id === oluvchi._id.toString() ?  { ...user, isMuted: true} : user)
+      io.emit("")
+
     } catch (e) {
       console.error("websocket mute_admin error: ", e);
     }
