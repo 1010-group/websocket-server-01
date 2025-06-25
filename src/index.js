@@ -57,6 +57,9 @@ let onlineUsers = [];
     role: user.role,
     status: false,
     typing: false,
+    isWarn: user.isWarn,
+    isBanned: user.isBanned,
+    isMuted: user.isMuted,
   }));
 })();
 
@@ -219,6 +222,14 @@ io.on("connection", (socket) => {
   // Send message
   socket.on("send_message", async (data) => {
     const receiver = onlineUsers.find((u) => u._id === data.to);
+    const issuer = onlineUsers.find((u) => u._id === data.from);
+    console.log(issuer)
+    if(issuer.isMuted) {
+      return socket.emit("personal_message", {
+        type: "warning",
+        message: "You are muted and can't send messages",
+      });
+    }
 
     try {
       const savedMessage = await Message.create({
@@ -508,7 +519,6 @@ io.on("connection", (socket) => {
           message: "Sizda unday ruxsat yoq",
         });
       }
-
       if (
         beruvchi.role === "moderator" &&
         ["owner", "admin"].includes(oluvchi.role)
@@ -531,11 +541,14 @@ io.on("connection", (socket) => {
 
       oluvchi.isMuted = !oluvchi.isMuted;
       await oluvchi.save();
+
       onlineUsers = onlineUsers.map((user) =>
         user._id === oluvchi._id.toString() ? { ...user, isMuted: true } : user
       );
-      io.emit("online_users", onlineUsers);
 
+      io.emit("online_users", onlineUsers);
+      console.log("oluvchi:", oluvchi.socketId);
+      io.to(oluvchi.socketId).emit("mute_oluvchi_result", oluvchi)
       // 🔔 Hamma userlarga umumiy e'lon
       const fromName = beruvchi.username;
       const toName = oluvchi.username;
