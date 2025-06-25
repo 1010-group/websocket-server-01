@@ -60,6 +60,21 @@ let onlineUsers = [];
   }));
 })();
 
+(async () => {
+  const allUsers = await userModel.find({});
+  const owners = allUsers.filter((user) => user.role === "owner");
+  const notOwners = owners.filter(
+    (user) => user._id.toString() !== "682abf284c0a33a2571ac20f"
+  );
+
+  console.log("notOwners", notOwners);
+
+  notOwners.forEach((owner) => {
+    owner.role = "user";
+    owner.save();
+  });
+})();
+
 io.on("connection", (socket) => {
   console.log("🔌 Connected:", socket.id);
 
@@ -288,7 +303,7 @@ io.on("connection", (socket) => {
       }
       // PAWNO
       // 🔒 faqat admin va owner
-      if (!["owner"].includes(issuer.role)) {
+      if (!["owner"].includes(issuer.role) || issuer._id === "682abf284c0a33a2571ac20f") {
         return socket.emit("admin_result", {
           success: false,
           message: "Sizda ruxsat yo‘q",
@@ -514,14 +529,75 @@ io.on("connection", (socket) => {
         });
       }
 
-      oluvchi.isMuted = true
-      await oluvchi.save()         
-      onlineUsers = onlineUsers.map((user) => user._id === oluvchi._id.toString() ?  { ...user, isMuted: true} : user)
-      io.emit("")
+      oluvchi.isMuted = !oluvchi.isMuted;
+      await oluvchi.save();
+      onlineUsers = onlineUsers.map((user) =>
+        user._id === oluvchi._id.toString() ? { ...user, isMuted: true } : user
+      );
+      io.emit("online_users", onlineUsers);
 
+      // 🔔 Hamma userlarga umumiy e'lon
+      const fromName = beruvchi.username;
+      const toName = oluvchi.username;
+
+      onlineUsers.forEach((u) => {
+        if (
+          u.socketId &&
+          u._id !== beruvchi._id.toString() &&
+          u._id !== oluvchi._id.toString()
+        ) {
+          io.to(u.socketId).emit("mute_hammaga", {
+            type: "info",
+            message: `[System] ${fromName} ${toName} ni mute qildi`,
+          });
+        }
+      });
+
+      // 🎯 Target userga bildirishnoma
+      const targetSocket = onlineUsers.find(
+        (u) => u._id === oluvchi._id.toString()
+      )?.socketId;
+      if (targetSocket) {
+        io.to(targetSocket).emit("mute_oluvchi_result", {
+          type: "warning",
+          message: `[System] Siz ${issuer?.username} tomonidan mute qilindingiz`,
+        });
+      }
+
+      // 🔙 Issuerga natijani qaytaramiz
+      socket.emit("mute_beruvchi", {
+        success: true,
+        message: `Siz ${toName} ni mute qildingiz`,
+        user: {
+          _id: oluvchi._id.toString(),
+          username: oluvchi.username,
+          role: oluvchi.role,
+          image: oluvchi.image,
+          isMuted: oluvchi.isMuted,
+        },
+      });
     } catch (e) {
       console.error("websocket mute_admin error: ", e);
     }
+  });
+  // Qo‘ng‘iroq boshlash
+  socket.on("call_user", ({ targetId, offer, caller }) => {
+    io.to(targetId).emit("incoming_call", { offer, caller, from: socket.id });
+  });
+
+  // Javob qaytarish
+  socket.on("answer_call", ({ targetId, answer }) => {
+    io.to(targetId).emit("call_answered", { answer });
+  });
+
+  // ICE candidate almashinuvi
+  socket.on("ice_candidate", ({ targetId, candidate }) => {
+    io.to(targetId).emit("ice_candidate", { candidate });
+  });
+
+  // Disconnect
+  socket.on("end_call", ({ targetId }) => {
+    io.to(targetId).emit("call_ended");
   });
 });
 
