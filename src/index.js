@@ -26,6 +26,7 @@ app.use(express.json());
 const userRouter = require("./routers/userRouter");
 const messageRouter = require("./routers/messageRouter");
 const notificationRouter = require("./routers/notificationRouter");
+const { log } = require("console");
 app.use("/api/users", userRouter);
 app.use("/api/messages", messageRouter);
 app.use("/api/notifications", notificationRouter);
@@ -195,28 +196,8 @@ io.on("connection", (socket) => {
         ? { ...u, status: true, socketId: socket.id, image: user.image }
         : u
     );
+    
     io.emit("online_users", onlineUsers);
-    // Notify friends (assuming friends are stored in user model)
-    // const currentUser = await userModel.findById(user._id);
-    // if (currentUser?.friends) {
-    //   for (const friendId of currentUser?.friends) {
-    //     const friend = onlineUsers.find((u) => u._id === friendId.toString());
-    //     if (friend?.socketId) {
-    //       const notification = await Notification.create({
-    //         userId: friendId,
-    //         type: 'message',
-    //         message: `${user.username} is now online`,
-    //         fromUser: {
-    //           _id: user._id,
-    //           username: user.username,
-    //           image: user.image,
-    //         },
-    //         read: false,
-    //       });
-    //       io.to(friend.socketId).emit("new_notification", notification);
-    //     }
-    //   }
-    // }
   });
 
   // Send message
@@ -596,21 +577,25 @@ io.on("connection", (socket) => {
   
   // Qo‘ng‘iroq boshlash
   socket.on("call_user", ({ targetId, offer, caller }) => {
+    console.log("Call User:", { targetId, offer, caller });
     io.to(targetId).emit("incoming_call", { offer, caller, from: socket.id });
   });
 
   // Javob qaytarish
   socket.on("answer_call", ({ targetId, answer }) => {
+    console.info("Answer Call:", { targetId, answer });
     io.to(targetId).emit("call_answered", { answer });
   });
 
   // ICE candidate almashinuvi
   socket.on("ice_candidate", ({ targetId, candidate }) => {
+    console.log("ICE Candidate:", { targetId, candidate });
     io.to(targetId).emit("ice_candidate", { candidate });
   });
 
   // Disconnect
   socket.on("end_call", ({ targetId }) => {
+    console.log("End Call:", { targetId });
     io.to(targetId).emit("call_ended");
   });
 });
