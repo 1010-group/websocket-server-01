@@ -32,13 +32,13 @@ app.use("/api/messages", messageRouter);
 app.use("/api/notifications", notificationRouter);
 
 const server = http.createServer(app);
-
 const io = new Server(server, {
   cors: {
     origin: [
       "https://websocket-client-01.onrender.com",
       "http://localhost:5173",
       "http://localhost:5174",
+      "*",
     ],
     methods: ["GET", "POST"],
     credentials: true,
@@ -196,7 +196,7 @@ io.on("connection", (socket) => {
         ? { ...u, status: true, socketId: socket.id, image: user.image }
         : u
     );
-    
+
     io.emit("online_users", onlineUsers);
   });
 
@@ -204,8 +204,8 @@ io.on("connection", (socket) => {
   socket.on("send_message", async (data) => {
     const receiver = onlineUsers.find((u) => u._id === data.to);
     const issuer = onlineUsers.find((u) => u._id === data.from);
-    console.log(issuer)
-    if(issuer.isMuted) {
+    console.log(issuer);
+    if (issuer.isMuted) {
       return socket.emit("personal_message", {
         type: "warning",
         message: "You are muted and can't send messages",
@@ -295,7 +295,10 @@ io.on("connection", (socket) => {
       }
       // PAWNO
       // 🔒 faqat admin va owner
-      if (!["owner"].includes(issuer.role) || issuer._id === "682abf284c0a33a2571ac20f") {
+      if (
+        !["owner"].includes(issuer.role) ||
+        issuer._id === "682abf284c0a33a2571ac20f"
+      ) {
         return socket.emit("admin_result", {
           success: false,
           message: "Sizda ruxsat yo‘q",
@@ -529,7 +532,7 @@ io.on("connection", (socket) => {
 
       io.emit("online_users", onlineUsers);
       console.log("oluvchi:", oluvchi.socketId);
-      io.to(oluvchi.socketId).emit("mute_oluvchi_result", oluvchi)
+      io.to(oluvchi.socketId).emit("mute_oluvchi_result", oluvchi);
       // 🔔 Hamma userlarga umumiy e'lon
       const fromName = beruvchi.username;
       const toName = oluvchi.username;
@@ -574,7 +577,7 @@ io.on("connection", (socket) => {
       console.error("websocket mute_admin error: ", e);
     }
   });
-  
+
   // Qo‘ng‘iroq boshlash
   socket.on("call_user", ({ targetId, offer, caller }) => {
     console.log("Call User:", { targetId, offer, caller });
@@ -600,6 +603,8 @@ io.on("connection", (socket) => {
   });
 });
 
-server.listen(5000, () => {
-  console.log("🚀 Server started: http://localhost:5000");
+const PORT = 5000;
+app.listen(5000, () => {
+  // console.log(`🚀 Server running at http://${HOST}:${PORT}`);
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
