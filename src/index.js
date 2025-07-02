@@ -16,6 +16,7 @@ app.use(
       "https://websocket-client-01.onrender.com",
       "http://localhost:5173",
       "http://localhost:5174",
+      "*",
     ],
     credentials: true,
   })
@@ -26,7 +27,6 @@ app.use(express.json());
 const userRouter = require("./routers/userRouter");
 const messageRouter = require("./routers/messageRouter");
 const notificationRouter = require("./routers/notificationRouter");
-const { log } = require("console");
 app.use("/api/users", userRouter);
 app.use("/api/messages", messageRouter);
 app.use("/api/notifications", notificationRouter);
@@ -604,7 +604,6 @@ io.on("connection", (socket) => {
 });
 
 const PORT = 5000;
-app.listen(5000, () => {
-  // console.log(`🚀 Server running at http://${HOST}:${PORT}`);
+server.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
