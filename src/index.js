@@ -274,7 +274,6 @@ io.on("connection", (socket) => {
     io.emit("online_users", onlineUsers);
     console.log("🔌 Disconnected:", socket.id);
   });
-
   socket.on("make_admin", async ({ userId, SelectedId, role }) => {
     try {
       const issuer = await userModel.findById(userId);
@@ -287,60 +286,67 @@ io.on("connection", (socket) => {
         });
       }
 
-      if (!["user", "admin", "moderator"].includes(role)) {
+      if (!["user", "admin", "moderator", "owner"].includes(role)) {
         return socket.emit("admin_result", {
           success: false,
           message: "Noto‘g‘ri rol tanlandi",
         });
       }
-      // PAWNO
-      // 🔒 faqat admin va owner
-      if (
-        !["owner"].includes(issuer.role) ||
-        issuer._id === "682abf284c0a33a2571ac20f"
-      ) {
+
+      // Only owners can assign roles, including owner role
+      if (issuer.role !== "owner") {
         return socket.emit("admin_result", {
           success: false,
-          message: "Sizda ruxsat yo‘q",
+          message: "Sizda ruxsat yo‘q, faqat owner rol o‘zgartira oladi",
         });
       }
 
-      // 🔐 owner ga tegmaysan
-      if (target.role === "owner") {
+      // Prevent changing the role of the same user
+      if (issuer._id.toString() === target._id.toString()) {
         return socket.emit("admin_result", {
           success: false,
-          message: "Owner rolini o‘zgartirish mumkin emas",
+          message: "O‘zingizning rolingizni o‘zgartira olmaysiz",
         });
       }
 
-      // ❌ Agar allaqachon shu rol bo‘lsa
+      // Prevent assigning owner role to an already banned user
+      if (role === "owner" && target.isBanned) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Banned foydalanuvchiga owner roli berilmaydi",
+        });
+      }
+
+      // If the target is already the same role
       if (target.role === role) {
         return socket.emit("admin_result", {
           success: false,
-          message: `U foydalanuvchi allaqachon ${role} bo‘lgan`,
+          message: `Foydalanuvchi allaqachon ${role} rolida`,
         });
       }
 
-      // ✅ Bazani yangilaymiz
+      // Update the target's role
       target.role = role;
       await target.save();
 
-      // 🔄 onlineUsers list'ini yangilaymiz (agar bor bo‘lsa)
+      // Update onlineUsers list
       onlineUsers = onlineUsers.map((u) =>
         u._id === target._id.toString() ? { ...u, role: role } : u
       );
       io.emit("online_users", onlineUsers);
 
-      // 🔔 Hamma userlarga umumiy e'lon
+      // Role names in Uzbek for notifications
       const roleNameUz = {
         user: "oddiy foydalanuvchi",
         admin: "administrator",
         moderator: "moderator",
+        owner: "egasi",
       }[role];
 
       const fromName = issuer.username;
       const toName = target.username;
 
+      // Broadcast to all users except issuer and target
       onlineUsers.forEach((u) => {
         if (
           u.socketId &&
@@ -354,7 +360,7 @@ io.on("connection", (socket) => {
         }
       });
 
-      // 🎯 Target userga bildirishnoma
+      // Notify the target user
       const targetSocket = onlineUsers.find(
         (u) => u._id === target._id.toString()
       )?.socketId;
@@ -365,7 +371,7 @@ io.on("connection", (socket) => {
         });
       }
 
-      // 🔙 Issuerga natijani qaytaramiz
+      // Return result to issuer
       socket.emit("admin_result", {
         success: true,
         message: `Siz ${toName} ni ${roleNameUz} qildingiz`,
@@ -385,11 +391,21 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("ban_user", async ({ userId, SelectedId, reason }) => {
+  socket.on("ban_user", async ({ userId, selectedId, reason }) => {
     try {
-      console.log("ban_user", { userId, SelectedId, reason });
+      console.log("[ban_user] Payload:", { userId, selectedId, reason });
+      console.log("gey",);
+
+      // 📌 Проверка входных данных
+      if (!userId || !selectedId || !reason) {
+        return socket.emit("ban_result", {
+          success: false,
+          message: "Kerakli ma'lumotlar yetarli emas",
+        });
+      }
+
       const issuer = await userModel.findById(userId);
-      const target = await userModel.findById(SelectedId);
+      const target = await userModel.findById(selectedId);
 
       if (!issuer || !target) {
         return socket.emit("ban_result", {
@@ -406,43 +422,41 @@ io.on("connection", (socket) => {
         });
       }
 
-      // 🔐 owner ga tegmaysan
+      // 🔐 Tegishli role himoyasi
       if (target.role === "owner") {
         return socket.emit("ban_result", {
           success: false,
-          message: "Ownerga Ban berish mumkin emas",
+          message: "Ownerga ban berish mumkin emas",
         });
       }
 
-      // 🔐 owner ga tegmaysan
-      if (target.role === "admin" && issuer.role === "admin") {
+      if (issuer.role === "admin" && target.role === "admin") {
         return socket.emit("ban_result", {
           success: false,
-          message: "Admin Adminga Ban berish mumkin emas",
+          message: "Admin adminga ban bera olmaydi",
         });
       }
 
-      // ❌ Agar allaqachon shu akkaunt ban olgan bo‘lsa
       if (target.isBanned) {
         return socket.emit("ban_result", {
           success: false,
-          message: `U foydalanuvchi allaqachon ban bo‘lgan`,
+          message: `Foydalanuvchi allaqachon ban qilingan`,
         });
       }
 
-      // ✅ Bazani yangilaymiz
+      // ✅ Ban'ni amalga oshiramiz
       target.isBanned = true;
-      target.isWarn = 0; // Reset warnings on ban
+      target.isWarn = 0;
       await target.save();
 
-      // 🔄 onlineUsers list'ini yangilaymiz (agar bor bo‘lsa)
+      // 🔁 onlineUsers yangilash (agar mavjud bo‘lsa)
       onlineUsers = onlineUsers.map((u) =>
         u._id === target._id.toString() ? { ...u, isBanned: true } : u
       );
 
       io.emit("online_users", onlineUsers);
 
-      // 🔔 Hamma userlarga umumiy e'lon
+      // 📢 Umumiy xabar
       const fromName = issuer.username;
       const toName = target.username;
 
@@ -462,15 +476,20 @@ io.on("connection", (socket) => {
       // 🎯 Target userga bildirishnoma
       const targetSocket = onlineUsers.find(
         (u) => u._id === target._id.toString()
+
+
+
+
       )?.socketId;
+
       if (targetSocket) {
         io.to(targetSocket).emit("personal_message", {
           type: "warning",
-          message: `[System] Siz ${issuer?.username} tomonidan ban qilindingiz`,
+          message: `[System] Siz ${fromName} tomonidan ban qilindingiz. Sabab: ${reason}`,
         });
       }
 
-      // 🔙 Issuerga natijani qaytaramiz
+      // 🔙 Issuerga natija
       socket.emit("ban_result", {
         success: true,
         message: `Siz ${toName} ni ban qildingiz`,
@@ -479,12 +498,203 @@ io.on("connection", (socket) => {
           username: target.username,
           role: target.role,
           image: target.image,
+          isBanned: target.isBanned,
         },
       });
     } catch (e) {
-      console.log("SERVER ERROR", e);
+      console.error("[ban_user] SERVER ERROR:", e);
+      socket.emit("ban_result", {
+        success: false,
+        message: "Serverda xatolik yuz berdi",
+      });
     }
   });
+
+  socket.on("unban_user", async ({ userId }) => {
+    try {
+      const user = await User.findById(userId);
+      if (!user) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Foydalanuvchi topilmadi",
+        });
+      }
+
+      user.isBanned = false;
+      user.isWarn = 0;
+      await user.save();
+
+      // 🔁 Обновляем в онлайн-списке
+      onlineUsers = onlineUsers.map((u) =>
+        u._id === userId ? { ...u, isBanned: false, isWarn: 0 } : u
+      );
+
+      io.emit("online_users", onlineUsers); // обновление на клиенте
+
+      // 📤 Отправляем результат отправителю
+      socket.emit("admin_result", {
+        success: true,
+        message: `${user.username} foydalanuvchisi unblock qilindi`,
+        user: {
+          _id: user._id.toString(),
+          username: user.username,
+          image: user.image,
+          role: user.role,
+          isBanned: false,
+          isWarn: 0,
+        },
+      });
+    } catch (error) {
+      console.error("Unban error:", error);
+      socket.emit("admin_result", {
+        success: false,
+        message: "Serverda xatolik yuz berdi",
+      });
+    }
+  });
+
+ socket.on("kick_user", async ({ userId, selectedId }) => {
+  try {
+    const issuer = await userModel.findById(userId);
+    const target = await userModel.findById(selectedId);
+
+    if (!issuer || !target) {
+      return socket.emit("kick_result", {
+        success: false,
+        message: "Foydalanuvchi topilmadi",
+      });
+    }
+
+    if (issuer.role !== "owner") {
+      return socket.emit("kick_result", {
+        success: false,
+        message: "Faqat owner kikka ruxsatga ega",
+      });
+    }
+
+    const targetSocket = onlineUsers.find((u) => u._id === selectedId)?.socketId;
+    if (targetSocket) {
+      io.to(targetSocket).emit("kick_user", {
+        message: `[System] Siz ${issuer.username} tomonidan kick qilindingiz`,
+      });
+
+      // optionally: disconnect
+      io.to(targetSocket).disconnectSockets(true);
+    }
+
+    socket.emit("kick_result", {
+      success: true,
+      message: `${target.username} muvaffaqiyatli kick qilindi`,
+    });
+
+    // optionally update everyone
+    onlineUsers = onlineUsers.filter(u => u._id !== selectedId);
+    io.emit("online_users", onlineUsers);
+  } catch (err) {
+    console.log("kick_user error:", err);
+  }
+});
+
+
+
+  socket.on("unmute_admin", async ({ userID, selectedUser }) => {
+    try {
+      const beruvchi = await userModel.findById(userID);
+      const oluvchi = await userModel.findById(selectedUser);
+
+      if (!beruvchi || !oluvchi) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Foydalanuvchi topilmadi",
+        });
+      }
+
+      if (!["owner", "admin", "moderator"].includes(beruvchi.role)) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Sizda unday ruxsat yo‘q",
+        });
+      }
+
+      if (
+        beruvchi.role === "moderator" &&
+        ["owner", "admin"].includes(oluvchi.role)
+      ) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Sizda unday ruxsat yo‘q",
+        });
+      }
+
+      if (
+        beruvchi.role === "admin" &&
+        ["owner", "admin"].includes(oluvchi.role)
+      ) {
+        return socket.emit("admin_result", {
+          success: false,
+          message: "Sizda unday ruxsat yo‘q",
+        });
+      }
+
+      // 🔕 Очищаем mute
+      oluvchi.isMuted = false;
+      await oluvchi.save();
+
+      // Обновляем онлайн-список
+      onlineUsers = onlineUsers.map((user) =>
+        user._id === oluvchi._id.toString()
+          ? { ...user, isMuted: false }
+          : user
+      );
+
+      io.emit("online_users", onlineUsers);
+
+      const fromName = beruvchi.username;
+      const toName = oluvchi.username;
+
+      // 📢 Всем сообщение
+      onlineUsers.forEach((u) => {
+        if (
+          u.socketId &&
+          u._id !== beruvchi._id.toString() &&
+          u._id !== oluvchi._id.toString()
+        ) {
+          io.to(u.socketId).emit("mute_hammaga", {
+            type: "info",
+            message: `[System] ${fromName} ${toName} ni mute dan chiqardi`,
+          });
+        }
+      });
+
+      // 📬 Целевому пользователю
+      const targetSocket = onlineUsers.find(
+        (u) => u._id === oluvchi._id.toString()
+      )?.socketId;
+
+      if (targetSocket) {
+        io.to(targetSocket).emit("mute_oluvchi_result", {
+          type: "info",
+          message: `[System] Sizga mute olib tashlandi`,
+        });
+      }
+
+      // 🔙 Отправителю
+      socket.emit("mute_beruvchi", {
+        success: true,
+        message: `Siz ${toName} dan mute olib tashladingiz`,
+        user: {
+          _id: oluvchi._id.toString(),
+          username: oluvchi.username,
+          role: oluvchi.role,
+          image: oluvchi.image,
+          isMuted: false,
+        },
+      });
+    } catch (e) {
+      console.error("websocket unmute_admin error: ", e);
+    }
+  });
+
 
   socket.on("mute_admin", async ({ userID, selectedUser, reason }) => {
     try {
