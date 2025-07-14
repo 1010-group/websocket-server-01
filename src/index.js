@@ -173,7 +173,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // Get message history between two users
   socket.on("get_history", async ({ from, to }) => {
     try {
       const messages = await Message.find({
@@ -189,7 +188,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // User joined
   socket.on("user_joined", async (user) => {
     onlineUsers = onlineUsers.map((u) =>
       u._id === user._id
@@ -200,7 +198,6 @@ io.on("connection", (socket) => {
     io.emit("online_users", onlineUsers);
   });
 
-  // Send message
   socket.on("send_message", async (data) => {
     const receiver = onlineUsers.find((u) => u._id === data.to);
     const issuer = onlineUsers.find((u) => u._id === data.from);
