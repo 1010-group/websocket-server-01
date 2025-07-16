@@ -17,8 +17,7 @@ const userSchema = new mongoose.Schema(
     },
     image: {
       type: String,
-      default:
-        "https://cdn3d.iconscout.com/3d/premium/thumb/user-3d-illustration-download-in-png-blend-fbx-gltf-file-formats--avatar-profile-account-objects-pack-tools-equipment-illustrations-3408818@0.png?f=webp",
+      default: "https://cdn3d.iconscout.com/3d/premium/thumb/user-3d-illustration-download-in-png-blend-fbx-gltf-file-formats--avatar-profile-account-objects-pack-tools-equipment-illustrations-3408818@0.png?f=webp",
     },
     password: {
       type: String,
@@ -32,7 +31,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      default: "user  ",
+      default: "user",
       enum: ["user", "admin", "moderator", "owner"],
     },
     isBanned: {

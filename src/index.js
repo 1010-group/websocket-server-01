@@ -27,6 +27,7 @@ app.use(express.json());
 const userRouter = require("./routers/userRouter");
 const messageRouter = require("./routers/messageRouter");
 const notificationRouter = require("./routers/notificationRouter");
+const User = require("./models/userModel");
 app.use("/api/users", userRouter);
 app.use("/api/messages", messageRouter);
 app.use("/api/notifications", notificationRouter);
@@ -81,6 +82,23 @@ let onlineUsers = [];
 
 io.on("connection", (socket) => {
   console.log("🔌 Connected:", socket.id);
+
+  socket.on("delete_user", async (userId) => {
+    try {
+      const user = await User.findById(userId);
+      if (!user) {
+        socket.emit("delete_user_result", { success: false, message: "User not found" });
+        return;
+      }
+
+      await User.findByIdAndDelete(userId);
+      io.emit("user_deleted", userId); // отправим всем, чтобы обновили список
+      socket.emit("delete_user_result", { success: true, message: "User deleted" });
+    } catch (error) {
+      console.error("Delete user error:", error);
+      socket.emit("delete_user_result", { success: false, message: "Server error" });
+    }
+  });
 
   socket.on("check_warns", async ({ userId }) => {
     try {
@@ -274,10 +292,11 @@ io.on("connection", (socket) => {
     io.emit("online_users", onlineUsers);
     console.log("🔌 Disconnected:", socket.id);
   });
-  socket.on("make_admin", async ({ userId, SelectedId, role }) => {
+
+  socket.on("make_admin", async ({ userId, selectedId, role }) => {
     try {
       const issuer = await userModel.findById(userId);
-      const target = await userModel.findById(SelectedId);
+      const target = await userModel.findById(selectedId);
 
       if (!issuer || !target) {
         return socket.emit("admin_result", {
@@ -293,88 +312,40 @@ io.on("connection", (socket) => {
         });
       }
 
-      // Only owners can assign roles, including owner role
-      if (issuer.role !== "owner") {
+      // ❌ Только один owner может быть
+      if (role === "owner") {
+        const existingOwner = await userModel.findOne({ role: "owner" });
+
+        if (existingOwner && existingOwner._id.toString() !== issuer._id.toString()) {
+          return socket.emit("admin_result", {
+            success: false,
+            message: "Allaqachon boshqa owner mavjud",
+          });
+        }
+      }
+
+      // 🔒 Только owner может менять роли, кроме случая самоповышения в owner если нет другого owner'а
+      const isSelfPromoteToOwner = role === "owner" && issuer._id.toString() === target._id.toString();
+      const isIssuerOwner = issuer.role === "owner";
+
+      if (!isIssuerOwner && !isSelfPromoteToOwner) {
         return socket.emit("admin_result", {
           success: false,
           message: "Sizda ruxsat yo‘q, faqat owner rol o‘zgartira oladi",
         });
       }
 
-      // Prevent changing the role of the same user
-      if (issuer._id.toString() === target._id.toString()) {
-        return socket.emit("admin_result", {
-          success: false,
-          message: "O‘zingizning rolingizni o‘zgartira olmaysiz",
-        });
-      }
-
-      // Prevent assigning owner role to an already banned user
-      if (role === "owner" && target.isBanned) {
-        return socket.emit("admin_result", {
-          success: false,
-          message: "Banned foydalanuvchiga owner roli berilmaydi",
-        });
-      }
-
-      // If the target is already the same role
-      if (target.role === role) {
-        return socket.emit("admin_result", {
-          success: false,
-          message: `Foydalanuvchi allaqachon ${role} rolida`,
-        });
-      }
-
-      // Update the target's role
       target.role = role;
       await target.save();
 
-      // Update onlineUsers list
       onlineUsers = onlineUsers.map((u) =>
-        u._id === target._id.toString() ? { ...u, role: role } : u
+        u._id === target._id.toString() ? { ...u, role } : u
       );
       io.emit("online_users", onlineUsers);
 
-      // Role names in Uzbek for notifications
-      const roleNameUz = {
-        user: "oddiy foydalanuvchi",
-        admin: "administrator",
-        moderator: "moderator",
-        owner: "egasi",
-      }[role];
-
-      const fromName = issuer.username;
-      const toName = target.username;
-
-      // Broadcast to all users except issuer and target
-      onlineUsers.forEach((u) => {
-        if (
-          u.socketId &&
-          u._id !== issuer._id.toString() &&
-          u._id !== target._id.toString()
-        ) {
-          io.to(u.socketId).emit("broadcast_message", {
-            type: "info",
-            message: `[System] ${fromName} ${toName} ni ${roleNameUz} qildi`,
-          });
-        }
-      });
-
-      // Notify the target user
-      const targetSocket = onlineUsers.find(
-        (u) => u._id === target._id.toString()
-      )?.socketId;
-      if (targetSocket) {
-        io.to(targetSocket).emit("personal_message", {
-          type: "warning",
-          message: `[System] Sizning rolingiz ${roleNameUz} qilib o‘zgartirildi`,
-        });
-      }
-
-      // Return result to issuer
       socket.emit("admin_result", {
         success: true,
-        message: `Siz ${toName} ni ${roleNameUz} qildingiz`,
+        message: `Foydalanuvchiga ${role} roli berildi`,
         user: {
           _id: target._id.toString(),
           username: target.username,
@@ -390,6 +361,8 @@ io.on("connection", (socket) => {
       });
     }
   });
+
+
 
   socket.on("ban_user", async ({ userId, selectedId, reason }) => {
     try {
@@ -553,47 +526,47 @@ io.on("connection", (socket) => {
     }
   });
 
- socket.on("kick_user", async ({ userId, selectedId }) => {
-  try {
-    const issuer = await userModel.findById(userId);
-    const target = await userModel.findById(selectedId);
+  socket.on("kick_user", async ({ userId, selectedId }) => {
+    try {
+      const issuer = await userModel.findById(userId);
+      const target = await userModel.findById(selectedId);
 
-    if (!issuer || !target) {
-      return socket.emit("kick_result", {
-        success: false,
-        message: "Foydalanuvchi topilmadi",
+      if (!issuer || !target) {
+        return socket.emit("kick_result", {
+          success: false,
+          message: "Foydalanuvchi topilmadi",
+        });
+      }
+
+      if (issuer.role !== "owner") {
+        return socket.emit("kick_result", {
+          success: false,
+          message: "Faqat owner kikka ruxsatga ega",
+        });
+      }
+
+      const targetSocket = onlineUsers.find((u) => u._id === selectedId)?.socketId;
+      if (targetSocket) {
+        io.to(targetSocket).emit("kick_user", {
+          message: `[System] Siz ${issuer.username} tomonidan kick qilindingiz`,
+        });
+
+        // optionally: disconnect
+        io.to(targetSocket).disconnectSockets(true);
+      }
+
+      socket.emit("kick_result", {
+        success: true,
+        message: `${target.username} muvaffaqiyatli kick qilindi`,
       });
+
+      // optionally update everyone
+      onlineUsers = onlineUsers.filter(u => u._id !== selectedId);
+      io.emit("online_users", onlineUsers);
+    } catch (err) {
+      console.log("kick_user error:", err);
     }
-
-    if (issuer.role !== "owner") {
-      return socket.emit("kick_result", {
-        success: false,
-        message: "Faqat owner kikka ruxsatga ega",
-      });
-    }
-
-    const targetSocket = onlineUsers.find((u) => u._id === selectedId)?.socketId;
-    if (targetSocket) {
-      io.to(targetSocket).emit("kick_user", {
-        message: `[System] Siz ${issuer.username} tomonidan kick qilindingiz`,
-      });
-
-      // optionally: disconnect
-      io.to(targetSocket).disconnectSockets(true);
-    }
-
-    socket.emit("kick_result", {
-      success: true,
-      message: `${target.username} muvaffaqiyatli kick qilindi`,
-    });
-
-    // optionally update everyone
-    onlineUsers = onlineUsers.filter(u => u._id !== selectedId);
-    io.emit("online_users", onlineUsers);
-  } catch (err) {
-    console.log("kick_user error:", err);
-  }
-});
+  });
 
 
 
