@@ -581,7 +581,7 @@ io.on("connection", (socket) => {
     io.to(targetId).emit("incoming_call", { offer, caller, from: socket.id });
   });
 
-  // Javob qaytarish
+  // Javob qaytarish a
   socket.on("answer_call", ({ targetId, answer }) => {
     console.info("Answer Call:", { targetId, answer });
     io.to(targetId).emit("call_answered", { answer });
