@@ -46,6 +46,19 @@ const io = new Server(server, {
   },
 });
 
+// Simple debounce function
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
 // Global list of online users
 let onlineUsers = [];
 
@@ -80,149 +93,19 @@ let onlineUsers = [];
   });
 })();
 
+// Debounced emit for online_users
+const emitOnlineUsers = debounce((users) => {
+  io.emit("online_users", users);
+}, 500); // Wait 500ms before emitting
+
 io.on("connection", (socket) => {
   console.log("🔌 Connected:", socket.id);
+  console.log("Online users:", onlineUsers.length);
 
-  socket.on("delete_user", async (userId) => {
-    try {
-      const user = await User.findById(userId);
-      if (!user) {
-        socket.emit("delete_user_result", { success: false, message: "User not found" });
-        return;
-      }
-
-      await User.findByIdAndDelete(userId);
-      io.emit("user_deleted", userId); // отправим всем, чтобы обновили список
-      socket.emit("delete_user_result", { success: true, message: "User deleted" });
-    } catch (error) {
-      console.error("Delete user error:", error);
-      socket.emit("delete_user_result", { success: false, message: "Server error" });
-    }
-  });
-
-  socket.on("check_warns", async ({ userId }) => {
-    try {
-      const user = await userModel.findById(userId);
-      if (!user) return;
-
-      socket.emit("warn_status", {
-        isWarn: user.isWarn,
-        isBanned: user.isBanned,
-      });
-    } catch (err) {
-      console.error("Error checking warnings:", err);
-    }
-  });
-
-  socket.on("warn_user", async ({ userId }) => {
-    try {
-      const user = await userModel.findById(userId);
-      if (!user) {
-        return socket.emit("warn_result", {
-          success: false,
-          message: "User not found",
-        });
-      }
-
-      if (user.isBanned) {
-        return socket.emit("warn_result", {
-          success: false,
-          message: "User is already banned",
-        });
-      }
-
-      // ❌ Блокируем предупреждение для owner
-      if (user.role === "owner") {
-        return socket.emit("warn_result", {
-          success: false,
-          message: "You are not allowed to warn an owner",
-        });
-      }
-
-      user.isWarn = (user.isWarn || 0) + 1;
-      if (user.isWarn >= 3) {
-        user.isBanned = true;
-      }
-
-      await user.save();
-
-      // Create notification for warned user
-      const notification = await Notification.create({
-        userId: user._id,
-        type: user.isBanned ? "ban" : "warning",
-        message: user.isBanned
-          ? `You have been banned due to receiving 3 warnings`
-          : `You received a warning (${user.isWarn}/3)`,
-        fromUser: { _id: null, username: "System", image: null },
-        read: false,
-      });
-
-      // Notify the admin who issued the warning
-      socket.emit("warn_result", {
-        success: true,
-        message: user.isBanned
-          ? "User received 3/3 warnings and was banned"
-          : `Warning: ${user.isWarn}/3`,
-        user: {
-          _id: user._id.toString(),
-          username: user.username,
-          isWarn: user.isWarn,
-          isBanned: user.isBanned,
-          image: user.image,
-          phone: user.phone,
-        },
-      });
-
-      // Notify the warned user if they are online
-      const warnedUser = onlineUsers.find((u) => u._id === userId);
-      if (warnedUser?.socketId) {
-        io.to(warnedUser.socketId).emit("warn_status", {
-          isWarn: user.isWarn,
-          isBanned: user.isBanned,
-        });
-        io.to(warnedUser.socketId).emit("new_notification", notification);
-      }
-    } catch (err) {
-      console.error("Error issuing warning:", err);
-      socket.emit("warn_result", {
-        success: false,
-        message: "Server error while issuing warning",
-      });
-    }
-  });
-
-  // Get message history between two users
-  socket.on("get_history", async ({ from, to }) => {
-    try {
-      const messages = await Message.find({
-        $or: [
-          { from: from, to: to },
-          { from: to, to: from },
-        ],
-      }).sort({ timestamp: 1 });
-
-      socket.emit("chat_history", messages);
-    } catch (err) {
-      console.error("❌ History error:", err);
-    }
-  });
-
-  // User joined
-  socket.on("user_joined", async (user) => {
-    onlineUsers = onlineUsers.map((u) =>
-      u._id === user._id
-        ? { ...u, status: true, socketId: socket.id, image: user.image }
-        : u
-    );
-
-    io.emit("online_users", onlineUsers);
-  });
-
-  // Send message
   socket.on("send_message", async (data) => {
     const receiver = onlineUsers.find((u) => u._id === data.to);
     const issuer = onlineUsers.find((u) => u._id === data.from);
-    console.log(issuer);
+
     if (issuer.isMuted) {
       return socket.emit("personal_message", {
         type: "warning",
@@ -264,8 +147,6 @@ io.on("connection", (socket) => {
       console.error("❌ Error saving message:", err);
     }
   });
-
-  // Typing event
   socket.on("typing", (data) => {
     const receiver = onlineUsers.find((u) => u._id === data.to);
     if (receiver?.socketId) {
@@ -276,27 +157,154 @@ io.on("connection", (socket) => {
     }
   });
 
-  // User left
+  socket.on("delete_user", async (userId) => {
+    try {
+      const user = await User.findById(userId);
+      if (!user) {
+        socket.emit("delete_user_result", { success: false, message: "User not found" });
+        return;
+      }
+
+      await User.findByIdAndDelete(userId);
+      io.emit("user_deleted", userId);
+      socket.emit("delete_user_result", { success: true, message: "User deleted" });
+    } catch (error) {
+      console.error("Delete user error:", error);
+      socket.emit("delete_user_result", { success: false, message: "Server error" });
+    }
+  });
+  socket.on("check_warns", async ({ userId }) => {
+    try {
+      const user = await userModel.findById(userId);
+      if (!user) return;
+
+      socket.emit("warn_status", {
+        isWarn: user.isWarn,
+        isBanned: user.isBanned,
+      });
+    } catch (err) {
+      console.error("Error checking warnings:", err);
+    }
+  });
+  socket.on("warn_user", async ({ userId }) => {
+    try {
+      const user = await userModel.findById(userId);
+      if (!user) {
+        return socket.emit("warn_result", {
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      if (user.isBanned) {
+        return socket.emit("warn_result", {
+          success: false,
+          message: "User is already banned",
+        });
+      }
+
+      if (user.role === "owner") {
+        return socket.emit("warn_result", {
+          success: false,
+          message: "You are not allowed to warn an owner",
+        });
+      }
+
+      user.isWarn = (user.isWarn || 0) + 1;
+      if (user.isWarn >= 3) {
+        user.isBanned = true;
+      }
+
+      await user.save();
+
+      const notification = await Notification.create({
+        userId: user._id,
+        type: user.isBanned ? "ban" : "warning",
+        message: user.isBanned
+          ? `You have been banned due to receiving 3 warnings`
+          : `You received a warning (${user.isWarn}/3)`,
+        fromUser: { _id: null, username: "System", image: null },
+        read: false,
+      });
+
+      socket.emit("warn_result", {
+        success: true,
+        message: user.isBanned
+          ? "User received 3/3 warnings and was banned"
+          : `Warning: ${user.isWarn}/3`,
+        user: {
+          _id: user._id.toString(),
+          username: user.username,
+          isWarn: user.isWarn,
+          isBanned: user.isBanned,
+          image: user.image,
+          phone: user.phone,
+        },
+      });
+
+      const warnedUser = onlineUsers.find((u) => u._id === userId);
+      if (warnedUser?.socketId) {
+        io.to(warnedUser.socketId).emit("warn_status", {
+          isWarn: user.isWarn,
+          isBanned: user.isBanned,
+        });
+        io.to(warnedUser.socketId).emit("new_notification", notification);
+      }
+
+      // Update onlineUsers
+      onlineUsers = onlineUsers.map((u) =>
+        u._id === userId ? { ...u, isWarn: user.isWarn, isBanned: user.isBanned } : u
+      );
+      emitOnlineUsers(onlineUsers); // Use debounced emit
+    } catch (err) {
+      console.error("Error issuing warning:", err);
+      socket.emit("warn_result", {
+        success: false,
+        message: "Server error while issuing warning",
+      });
+    }
+  });
+  socket.on("get_history", async ({ from, to }) => {
+    try {
+      const messages = await Message.find({
+        $or: [
+          { from: from, to: to },
+          { from: to, to: from },
+        ],
+      }).sort({ timestamp: 1 });
+
+      socket.emit("chat_history", messages);
+    } catch (err) {
+      console.error("❌ History error:", err);
+    }
+  });
+  socket.on("user_joined", async (user) => {
+    onlineUsers = onlineUsers.map((u) =>
+      u._id === user._id
+        ? { ...u, status: true, socketId: socket.id, image: user.image }
+        : u
+    );
+
+    emitOnlineUsers(onlineUsers); // Use debounced emit
+  });
   socket.on("user_left", (user) => {
     onlineUsers = onlineUsers.map((u) =>
       u._id === user._id ? { ...u, status: false, socketId: null } : u
     );
-    io.emit("online_users", onlineUsers);
+    emitOnlineUsers(onlineUsers); // Use debounced emit
   });
-
-  // On disconnect
   socket.on("disconnect", () => {
     onlineUsers = onlineUsers.map((u) =>
       u.socketId === socket.id ? { ...u, status: false, socketId: null } : u
     );
-    io.emit("online_users", onlineUsers);
+    emitOnlineUsers(onlineUsers); // Use debounced emit
     console.log("🔌 Disconnected:", socket.id);
   });
-
   socket.on("make_admin", async ({ userId, selectedId, role }) => {
     try {
       const issuer = await userModel.findById(userId);
       const target = await userModel.findById(selectedId);
+      console.log("make_admin payload:", { userId, target: target.username, selectedId, role });
 
       if (!issuer || !target) {
         return socket.emit("admin_result", {
@@ -312,7 +320,6 @@ io.on("connection", (socket) => {
         });
       }
 
-      // ❌ Только один owner может быть
       if (role === "owner") {
         const existingOwner = await userModel.findOne({ role: "owner" });
 
@@ -324,7 +331,6 @@ io.on("connection", (socket) => {
         }
       }
 
-      // 🔒 Только owner может менять роли, кроме случая самоповышения в owner если нет другого owner'а
       const isSelfPromoteToOwner = role === "owner" && issuer._id.toString() === target._id.toString();
       const isIssuerOwner = issuer.role === "owner";
 
@@ -341,6 +347,7 @@ io.on("connection", (socket) => {
       onlineUsers = onlineUsers.map((u) =>
         u._id === target._id.toString() ? { ...u, role } : u
       );
+
       io.emit("online_users", onlineUsers);
 
       socket.emit("admin_result", {
@@ -361,13 +368,10 @@ io.on("connection", (socket) => {
       });
     }
   });
-
-
-
   socket.on("ban_user", async ({ userId, selectedId, reason }) => {
     try {
       console.log("[ban_user] Payload:", { userId, selectedId, reason });
-      console.log("gey",);
+
 
       // 📌 Проверка входных данных
       if (!userId || !selectedId || !reason) {
@@ -482,7 +486,6 @@ io.on("connection", (socket) => {
       });
     }
   });
-
   socket.on("unban_user", async ({ userId }) => {
     try {
       const user = await User.findById(userId);
@@ -525,7 +528,6 @@ io.on("connection", (socket) => {
       });
     }
   });
-
   socket.on("kick_user", async ({ userId, selectedId }) => {
     try {
       const issuer = await userModel.findById(userId);
@@ -567,9 +569,6 @@ io.on("connection", (socket) => {
       console.log("kick_user error:", err);
     }
   });
-
-
-
   socket.on("unmute_admin", async ({ userID, selectedUser }) => {
     try {
       const beruvchi = await userModel.findById(userID);
@@ -667,59 +666,63 @@ io.on("connection", (socket) => {
       console.error("websocket unmute_admin error: ", e);
     }
   });
-
-
   socket.on("mute_admin", async ({ userID, selectedUser, reason }) => {
     try {
+      console.log("MUTE_ADMIN fired:", { userID, selectedUser, reason });
+
       const beruvchi = await userModel.findById(userID);
       const oluvchi = await userModel.findById(selectedUser);
 
       if (!beruvchi || !oluvchi) {
-        return socket.emit("admin_result", {
+        return socket.emit("mute_beruvchi", {
           success: false,
           message: "Foydalanuvchi topilmadi",
         });
       }
+
+      // Ruxsatni tekshirish
       if (!["owner", "admin", "moderator"].includes(beruvchi.role)) {
-        return socket.emit("admin_result", {
+        return socket.emit("mute_beruvchi", {
           success: false,
-          message: "Sizda unday ruxsat yoq",
+          message: "Sizda unday ruxsat yo‘q",
         });
       }
+
       if (
         beruvchi.role === "moderator" &&
         ["owner", "admin"].includes(oluvchi.role)
       ) {
-        return socket.emit("admin_result", {
+        return socket.emit("mute_beruvchi", {
           success: false,
-          message: "Sizda unday ruxsat yoq",
+          message: "Siz moderator sifatida bu foydalanuvchini mute qila olmaysiz",
         });
       }
 
       if (
         beruvchi.role === "admin" &&
-        ["owner", "admin"].includes(oluvchi.role)
+        oluvchi.role === "owner"
       ) {
-        return socket.emit("admin_result", {
+        return socket.emit("mute_beruvchi", {
           success: false,
-          message: "Sizda unday ruxsat yoq",
+          message: "Siz admin sifatida owner’ni mute qila olmaysiz",
         });
       }
 
+      // Mute / Unmute qilish
       oluvchi.isMuted = !oluvchi.isMuted;
       await oluvchi.save();
 
+      // onlineUsers dagi holatni yangilash
       onlineUsers = onlineUsers.map((user) =>
-        user._id === oluvchi._id.toString() ? { ...user, isMuted: true } : user
+        user._id === oluvchi._id.toString() ? { ...user, isMuted: oluvchi.isMuted } : user
       );
 
       io.emit("online_users", onlineUsers);
-      console.log("oluvchi:", oluvchi.socketId);
-      io.to(oluvchi.socketId).emit("mute_oluvchi_result", oluvchi);
-      // 🔔 Hamma userlarga umumiy e'lon
+
       const fromName = beruvchi.username;
       const toName = oluvchi.username;
 
+      // Hamma userlarga e'lon
       onlineUsers.forEach((u) => {
         if (
           u.socketId &&
@@ -728,26 +731,27 @@ io.on("connection", (socket) => {
         ) {
           io.to(u.socketId).emit("mute_hammaga", {
             type: "info",
-            message: `[System] ${fromName} ${toName} ni mute qildi`,
+            message: `[System] ${fromName} ${toName} ni ${oluvchi.isMuted ? "mute" : "unmute"} qildi`,
           });
         }
       });
 
-      // 🎯 Target userga bildirishnoma
+      // Target userga bildirishnoma
       const targetSocket = onlineUsers.find(
         (u) => u._id === oluvchi._id.toString()
       )?.socketId;
+
       if (targetSocket) {
         io.to(targetSocket).emit("mute_oluvchi_result", {
           type: "warning",
-          message: `[System] Siz ${issuer?.username} tomonidan mute qilindingiz`,
+          message: `[System] Siz ${beruvchi.username} tomonidan ${oluvchi.isMuted ? "mute" : "unmute"} qilindingiz`,
         });
       }
 
-      // 🔙 Issuerga natijani qaytaramiz
+      // Beruvchiga qaytarish
       socket.emit("mute_beruvchi", {
         success: true,
-        message: `Siz ${toName} ni mute qildingiz`,
+        message: `Siz ${toName} ni ${oluvchi.isMuted ? "mute" : "unmute"} qildingiz`,
         user: {
           _id: oluvchi._id.toString(),
           username: oluvchi.username,
@@ -757,29 +761,25 @@ io.on("connection", (socket) => {
         },
       });
     } catch (e) {
-      console.error("websocket mute_admin error: ", e);
+      console.error("websocket mute_admin error:", e);
+      socket.emit("mute_beruvchi", {
+        success: false,
+        message: "Serverda xatolik yuz berdi",
+      });
     }
   });
-
-  // Qo‘ng‘iroq boshlash
   socket.on("call_user", ({ targetId, offer, caller }) => {
     console.log("Call User:", { targetId, offer, caller });
     io.to(targetId).emit("incoming_call", { offer, caller, from: socket.id });
   });
-
-  // Javob qaytarish
   socket.on("answer_call", ({ targetId, answer }) => {
     console.info("Answer Call:", { targetId, answer });
     io.to(targetId).emit("call_answered", { answer });
   });
-
-  // ICE candidate almashinuvi
   socket.on("ice_candidate", ({ targetId, candidate }) => {
     console.log("ICE Candidate:", { targetId, candidate });
     io.to(targetId).emit("ice_candidate", { candidate });
   });
-
-  // Disconnect
   socket.on("end_call", ({ targetId }) => {
     console.log("End Call:", { targetId });
     io.to(targetId).emit("call_ended");
